@@ -25,7 +25,6 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "motion/react";
-import AnalyticsModal from "@/components/AnalyticsModal";
 
 type QRCodeData = {
   id: string;
@@ -73,8 +72,6 @@ export default function Dashboard() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
-  const [selectedQrCode, setSelectedQrCode] = useState<string | null>(null);
-  const [selectedQrCodeTitle, setSelectedQrCodeTitle] = useState<string>("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -295,16 +292,6 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-[#7B48EA] selection:text-white">
-      <AnimatePresence>
-        {selectedQrCode && (
-          <AnalyticsModal
-            qrCodeId={selectedQrCode}
-            qrCodeTitle={selectedQrCodeTitle}
-            onClose={() => setSelectedQrCode(null)}
-          />
-        )}
-      </AnimatePresence>
-
       <AnimatePresence>
         {syncing && (
           <motion.div
@@ -686,13 +673,7 @@ export default function Dashboard() {
                       key={qr.id}
                       className="bg-[#111111] rounded-2xl border border-white/10 overflow-hidden flex flex-col hover:border-white/20 transition-colors"
                     >
-                      <div 
-                        className="p-6 flex gap-6 items-center border-b border-white/5 cursor-pointer hover:bg-white/5 transition-colors"
-                        onClick={() => {
-                          setSelectedQrCode(qr.id);
-                          setSelectedQrCodeTitle(qr.title || qr.slug);
-                        }}
-                      >
+                      <div className="p-6 flex gap-6 items-center border-b border-white/5">
                         <div className="bg-white p-2 rounded-xl flex-shrink-0">
                           <QRCodeSVG
                             value={`${isMounted && typeof window !== "undefined" ? window.location.origin : ""}/q/${qr.slug}`}
