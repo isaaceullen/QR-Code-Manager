@@ -19,11 +19,16 @@ import {
   LogIn,
   Lock,
   QrCode,
+  TrendingUp,
+  Star,
+  Type,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 type QRCodeData = {
   id: string;
+  title?: string;
+  user_id?: string;
   original_url: string;
   slug: string;
   design_settings: {
@@ -58,6 +63,8 @@ export default function Dashboard() {
   // QR Code State
   const [qrCodes, setQrCodes] = useState<QRCodeData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
   const [color, setColor] = useState("#000000");
   const [logoUrl, setLogoUrl] = useState("");
@@ -70,10 +77,22 @@ export default function Dashboard() {
 
   const loadQRCodes = async () => {
     setLoading(true);
-    const { data, error } = await supabase
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const currentUser = session?.user;
+
+    let query = supabase
       .from("qr_codes")
       .select("*")
       .order("created_at", { ascending: false });
+
+    if (currentUser) {
+      query = query.eq("user_id", currentUser.id);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error("Error fetching QR codes:", error);
@@ -91,6 +110,7 @@ export default function Dashboard() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       if (session?.user) {
+        setMode("rastreavel");
         loadQRCodes();
       } else {
         setLoading(false);
@@ -102,6 +122,7 @@ export default function Dashboard() {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
+        setMode("rastreavel");
         loadQRCodes();
       } else {
         setQrCodes([]);
@@ -156,12 +177,15 @@ export default function Dashboard() {
     if (!user) return;
 
     setGenerating(true);
+    setSyncing(true);
     setError("");
 
     const slug = generateSlug(6);
     const finalLogo = logoFile || logoUrl;
 
     const newQrCode = {
+      title: title || "QR Code Sem Título",
+      user_id: user.id,
       original_url: url,
       slug,
       design_settings: {
@@ -183,20 +207,24 @@ export default function Dashboard() {
     } else if (data) {
       setQrCodes([data, ...qrCodes]);
       setUrl("");
+      setTitle("");
       setColor("#000000");
       setLogoUrl("");
       setLogoFile("");
     }
 
     setGenerating(false);
+    setSyncing(false);
   };
 
   const handleDelete = async (id: string) => {
+    setSyncing(true);
     const { error } = await supabase.from("qr_codes").delete().eq("id", id);
 
     if (!error) {
       setQrCodes(qrCodes.filter((qr) => qr.id !== id));
     }
+    setSyncing(false);
   };
 
   const handleCopy = (slug: string) => {
@@ -243,6 +271,34 @@ export default function Dashboard() {
     document.body.removeChild(link);
   };
 
+  const downloadListItemSVG = (id: string, title: string) => {
+    const svg = document.getElementById(`qr-svg-${id}`);
+    if (!svg) return;
+    const svgData = new XMLSerializer().serializeToString(svg);
+    const blob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
+    const downloadUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = `qrcode-${title || id}.svg`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const downloadListItemPNG = (id: string, title: string) => {
+    const canvas = document.getElementById(
+      `qr-canvas-${id}`,
+    ) as HTMLCanvasElement;
+    if (!canvas) return;
+    const downloadUrl = canvas.toDataURL("image/png", 1.0);
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = `qrcode-${title || id}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const activeLogo = logoFile || logoUrl;
   const qrValue =
     mode === "rastreavel" && url
@@ -251,6 +307,24 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-[#050505] text-white p-4 md:p-8 font-sans selection:bg-[#7B48EA] selection:text-white">
+      <AnimatePresence>
+        {syncing && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          >
+            <div className="bg-[#111111] border border-[#7B48EA]/30 p-6 rounded-2xl flex flex-col items-center gap-4 shadow-[0_0_30px_rgba(123,72,234,0.15)]">
+              <div className="w-8 h-8 border-2 border-white/20 border-t-[#7B48EA] rounded-full animate-spin" />
+              <p className="text-white font-medium">
+                Sincronizando com a Nuvem...
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="max-w-6xl mx-auto space-y-8">
         {/* Header */}
         <header className="flex items-center justify-between border-b border-white/10 pb-6">
@@ -385,6 +459,21 @@ export default function Dashboard() {
                     </h2>
                   </div>
                   <form onSubmit={handleGenerate} className="p-6 space-y-6">
+                    {mode === "rastreavel" && (
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-white/70 flex items-center gap-2">
+                          <Type className="w-4 h-4 text-white/40" />
+                          Título do QR Code
+                        </label>
+                        <input
+                          type="text"
+                          value={title}
+                          onChange={(e) => setTitle(e.target.value)}
+                          placeholder="Ex: Campanha de Verão"
+                          className="w-full px-4 py-3 rounded-xl bg-[#050505] border border-white/10 focus:border-[#7B48EA] focus:ring-1 focus:ring-[#7B48EA] outline-none transition-all text-white placeholder:text-white/30"
+                        />
+                      </div>
+                    )}
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-white/70 flex items-center gap-2">
                         <LinkIcon className="w-4 h-4 text-white/40" />
@@ -563,6 +652,57 @@ export default function Dashboard() {
           >
             <h2 className="text-xl font-semibold text-white">Seus QR Codes</h2>
 
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              <div className="bg-[#111111] rounded-2xl border border-[#7B48EA]/30 p-6">
+                <div className="flex items-center gap-3 mb-2">
+                  <QrCode className="w-5 h-5 text-[#7B48EA]" />
+                  <h3 className="text-white/70 font-medium">Total de QRs</h3>
+                </div>
+                <p className="text-3xl font-bold text-white">
+                  {qrCodes.length}
+                </p>
+              </div>
+              <div className="bg-[#111111] rounded-2xl border border-[#7B48EA]/30 p-6">
+                <div className="flex items-center gap-3 mb-2">
+                  <TrendingUp className="w-5 h-5 text-[#7B48EA]" />
+                  <h3 className="text-white/70 font-medium">
+                    Total de Cliques
+                  </h3>
+                </div>
+                <p className="text-3xl font-bold text-white">
+                  {qrCodes.reduce((acc, qr) => acc + (qr.clicks || 0), 0)}
+                </p>
+              </div>
+              <div className="bg-[#111111] rounded-2xl border border-[#7B48EA]/30 p-6">
+                <div className="flex items-center gap-3 mb-2">
+                  <Star className="w-5 h-5 text-[#7B48EA]" />
+                  <h3 className="text-white/70 font-medium">Mais Popular</h3>
+                </div>
+                <p
+                  className="text-lg font-bold text-white truncate"
+                  title={
+                    qrCodes.length > 0
+                      ? qrCodes.reduce((prev, current) =>
+                          prev.clicks > current.clicks ? prev : current,
+                        ).title ||
+                        qrCodes.reduce((prev, current) =>
+                          prev.clicks > current.clicks ? prev : current,
+                        ).original_url
+                      : "Nenhum"
+                  }
+                >
+                  {qrCodes.length > 0
+                    ? qrCodes.reduce((prev, current) =>
+                        prev.clicks > current.clicks ? prev : current,
+                      ).title ||
+                      qrCodes.reduce((prev, current) =>
+                        prev.clicks > current.clicks ? prev : current,
+                      ).original_url
+                    : "Nenhum"}
+                </p>
+              </div>
+            </div>
+
             {loading ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {[1, 2, 3].map((i) => (
@@ -621,6 +761,14 @@ export default function Dashboard() {
                           </span>
                           <span className="text-sm text-white/50">cliques</span>
                         </div>
+                        {qr.title && (
+                          <p
+                            className="text-white font-medium truncate"
+                            title={qr.title}
+                          >
+                            {qr.title}
+                          </p>
+                        )}
                         <p
                           className="text-sm text-white/50 truncate"
                           title={qr.original_url}
@@ -630,6 +778,46 @@ export default function Dashboard() {
                       </div>
                     </div>
 
+                    {/* Hidden Canvas for High-Res PNG Download */}
+                    <div className="hidden">
+                      <QRCodeSVG
+                        id={`qr-svg-${qr.id}`}
+                        value={`${isMounted && typeof window !== "undefined" ? window.location.origin : ""}/q/${qr.slug}`}
+                        size={2000}
+                        fgColor={qr.design_settings?.color || "#000000"}
+                        bgColor="#FFFFFF"
+                        level="H"
+                        imageSettings={
+                          qr.design_settings?.logo_url
+                            ? {
+                                src: qr.design_settings.logo_url,
+                                height: 450,
+                                width: 450,
+                                excavate: true,
+                              }
+                            : undefined
+                        }
+                      />
+                      <QRCodeCanvas
+                        id={`qr-canvas-${qr.id}`}
+                        value={`${isMounted && typeof window !== "undefined" ? window.location.origin : ""}/q/${qr.slug}`}
+                        size={2000}
+                        fgColor={qr.design_settings?.color || "#000000"}
+                        bgColor="#FFFFFF"
+                        level="H"
+                        imageSettings={
+                          qr.design_settings?.logo_url
+                            ? {
+                                src: qr.design_settings.logo_url,
+                                height: 450,
+                                width: 450,
+                                excavate: true,
+                              }
+                            : undefined
+                        }
+                      />
+                    </div>
+
                     <div className="bg-[#0A0A0A] p-4 flex items-center justify-between gap-2 mt-auto">
                       <div className="flex items-center gap-2 overflow-hidden">
                         <span className="text-xs font-mono text-white/60 bg-[#222222] px-2 py-1 rounded border border-white/5 truncate">
@@ -637,6 +825,24 @@ export default function Dashboard() {
                         </span>
                       </div>
                       <div className="flex gap-1">
+                        <button
+                          onClick={() =>
+                            downloadListItemPNG(qr.id, qr.title || qr.slug)
+                          }
+                          className="p-2 text-white/40 hover:text-[#7B48EA] hover:bg-[#7B48EA]/10 rounded-lg transition-colors"
+                          title="Baixar PNG"
+                        >
+                          <Download className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() =>
+                            downloadListItemSVG(qr.id, qr.title || qr.slug)
+                          }
+                          className="p-2 text-white/40 hover:text-[#7B48EA] hover:bg-[#7B48EA]/10 rounded-lg transition-colors"
+                          title="Baixar SVG"
+                        >
+                          <Download className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => handleCopy(qr.slug)}
                           className="p-2 text-white/40 hover:text-[#7B48EA] hover:bg-[#7B48EA]/10 rounded-lg transition-colors"
