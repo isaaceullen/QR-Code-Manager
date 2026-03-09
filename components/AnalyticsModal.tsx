@@ -154,8 +154,8 @@ export default function AnalyticsModal({
                             borderRadius: "8px",
                             color: "#fff",
                           }}
-                          formatter={(value: number) => [
-                            `${value} (${((value / totalScans) * 100).toFixed(1)}%)`,
+                          formatter={(value: any) => [
+                            value && totalScans > 0 ? `${value} (${((value / totalScans) * 100).toFixed(1)}%)` : '0',
                             "Acessos",
                           ]}
                         />
