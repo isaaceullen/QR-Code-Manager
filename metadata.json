@@ -1,0 +1,5 @@
+{
+  "name": "QR Code Manager",
+  "description": "Crie e gerencie QR Codes dinâmicos com rastreio de cliques e customização de design.",
+  "requestFramePermissions": []
+}
