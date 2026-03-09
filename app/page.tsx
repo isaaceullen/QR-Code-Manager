@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { QRCodeSVG } from "qrcode.react";
+import { useState, useEffect, useRef } from "react";
+import { QRCodeSVG, QRCodeCanvas } from "qrcode.react";
 import { supabase } from "@/lib/supabase";
 import {
   Copy,
@@ -14,8 +14,13 @@ import {
   Plus,
   Check,
   AlertCircle,
+  Download,
+  Upload,
+  LogIn,
+  Lock,
+  QrCode,
 } from "lucide-react";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 
 type QRCodeData = {
   id: string;
@@ -40,65 +45,128 @@ const generateSlug = (length = 6) => {
 };
 
 export default function Dashboard() {
+  const [isMounted, setIsMounted] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [mode, setMode] = useState<"avulso" | "rastreavel">("avulso");
+
+  // Auth State
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState("");
+
+  // QR Code State
   const [qrCodes, setQrCodes] = useState<QRCodeData[]>([]);
   const [loading, setLoading] = useState(true);
-
   const [url, setUrl] = useState("");
   const [color, setColor] = useState("#000000");
   const [logoUrl, setLogoUrl] = useState("");
+  const [logoFile, setLogoFile] = useState<string>("");
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
-  const [isMounted, setIsMounted] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const loadQRCodes = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("qr_codes")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching QR codes:", error);
+      setError("Erro ao carregar QR Codes.");
+    } else {
+      setQrCodes(data || []);
+    }
+    setLoading(false);
+  };
 
   useEffect(() => {
-    setIsMounted(true);
-    let mounted = true;
-    const loadQRCodes = async () => {
-      // Avoid synchronous setState in effect by using a microtask
-      await Promise.resolve();
-      if (!mounted) return;
+    Promise.resolve().then(() => setIsMounted(true));
 
-      setLoading(true);
-      const { data, error } = await supabase
-        .from("qr_codes")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (!mounted) return;
-
-      if (error) {
-        console.error("Error fetching QR codes:", error);
-        setError(
-          'Erro ao carregar QR Codes. Verifique se a tabela "qr_codes" existe no Supabase.',
-        );
+    // Check active session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        loadQRCodes();
       } else {
-        setQrCodes(data || []);
+        setLoading(false);
       }
-      setLoading(false);
-    };
+    });
 
-    loadQRCodes();
-    return () => {
-      mounted = false;
-    };
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        loadQRCodes();
+      } else {
+        setQrCodes([]);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthLoading(true);
+    setAuthError("");
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      setAuthError(error.message);
+    }
+    setAuthLoading(false);
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setMode("avulso");
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setLogoFile(reader.result as string);
+        setLogoUrl(""); // Clear URL if file is uploaded
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!url) return;
 
+    if (mode === "avulso") {
+      // Just visual generation, no saving
+      return;
+    }
+
+    if (!user) return;
+
     setGenerating(true);
     setError("");
 
     const slug = generateSlug(6);
+    const finalLogo = logoFile || logoUrl;
 
     const newQrCode = {
       original_url: url,
       slug,
       design_settings: {
         color,
-        logo_url: logoUrl,
+        logo_url: finalLogo,
       },
       clicks: 0,
     };
@@ -111,14 +179,13 @@ export default function Dashboard() {
 
     if (insertError) {
       console.error("Error generating QR code:", insertError);
-      setError(
-        'Erro ao criar QR Code. Certifique-se de que a tabela "qr_codes" foi criada corretamente.',
-      );
+      setError("Erro ao criar QR Code. Verifique as configurações do banco.");
     } else if (data) {
       setQrCodes([data, ...qrCodes]);
       setUrl("");
       setColor("#000000");
       setLogoUrl("");
+      setLogoFile("");
     }
 
     setGenerating(false);
@@ -141,264 +208,470 @@ export default function Dashboard() {
 
   const getPreviewUrl = () => {
     if (isMounted && typeof window !== "undefined") {
-      return `${window.location.origin}/q/preview`;
+      return mode === "rastreavel"
+        ? `${window.location.origin}/q/preview`
+        : url || "https://example.com";
     }
     return "https://example.com";
   };
 
+  const downloadSVG = () => {
+    const svg = document.getElementById("qr-code-svg");
+    if (!svg) return;
+    const svgData = new XMLSerializer().serializeToString(svg);
+    const blob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
+    const downloadUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = "qrcode.svg";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const downloadPNG = () => {
+    const canvas = document.getElementById(
+      "qr-code-canvas",
+    ) as HTMLCanvasElement;
+    if (!canvas) return;
+    const downloadUrl = canvas.toDataURL("image/png", 1.0);
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = "qrcode.png";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const activeLogo = logoFile || logoUrl;
+  const qrValue =
+    mode === "rastreavel" && url
+      ? getPreviewUrl()
+      : url || "https://example.com";
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 p-4 md:p-8 font-sans">
+    <div className="min-h-screen bg-[#050505] text-white p-4 md:p-8 font-sans selection:bg-[#7B48EA] selection:text-white">
       <div className="max-w-6xl mx-auto space-y-8">
         {/* Header */}
-        <header className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-              QR Code Manager
-            </h1>
-            <p className="text-slate-500 mt-1">
-              Crie, gerencie e rastreie seus QR Codes dinâmicos.
-            </p>
+        <header className="flex items-center justify-between border-b border-white/10 pb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-[#7B48EA] rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(123,72,234,0.4)]">
+              <QrCode className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-white">
+                QR Pro
+              </h1>
+              <p className="text-white/50 text-sm mt-0.5">Gerador & Tracker</p>
+            </div>
           </div>
+          {user && (
+            <button
+              onClick={handleLogout}
+              className="text-sm font-medium text-white/50 hover:text-white transition-colors"
+            >
+              Sair
+            </button>
+          )}
         </header>
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="font-medium">Erro de Conexão</p>
-              <p className="text-sm mt-1">{error}</p>
-              <div className="mt-3 text-sm font-mono bg-white/50 p-3 rounded-lg overflow-x-auto">
-                {`CREATE TABLE qr_codes (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  original_url TEXT NOT NULL,
-  slug TEXT UNIQUE NOT NULL,
-  design_settings JSONB DEFAULT '{}'::jsonb,
-  clicks INT8 DEFAULT 0,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);`}
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Mode Toggle */}
+        <div className="flex p-1 bg-[#111111] rounded-xl border border-white/5 w-fit mx-auto md:mx-0">
+          <button
+            onClick={() => setMode("avulso")}
+            className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              mode === "avulso"
+                ? "bg-[#222222] text-white shadow-sm"
+                : "text-white/50 hover:text-white"
+            }`}
+          >
+            Modo Avulso
+          </button>
+          <button
+            onClick={() => setMode("rastreavel")}
+            className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+              mode === "rastreavel"
+                ? "bg-[#7B48EA] text-white shadow-[0_0_15px_rgba(123,72,234,0.3)]"
+                : "text-white/50 hover:text-white"
+            }`}
+          >
+            <BarChart2 className="w-4 h-4" />
+            Modo Rastreável
+          </button>
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Create Form */}
-          <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="p-6 border-b border-slate-100">
-              <h2 className="text-lg font-semibold flex items-center gap-2">
-                <Plus className="w-5 h-5 text-indigo-500" />
-                Novo QR Code
-              </h2>
-            </div>
-            <form onSubmit={handleGenerate} className="p-6 space-y-6">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                  <LinkIcon className="w-4 h-4 text-slate-400" />
-                  URL de Destino
-                </label>
-                <input
-                  type="url"
-                  required
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  placeholder="https://seusite.com/campanha"
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                    <Palette className="w-4 h-4 text-slate-400" />
-                    Cor do QR Code
-                  </label>
-                  <div className="flex gap-3">
-                    <input
-                      type="color"
-                      value={color}
-                      onChange={(e) => setColor(e.target.value)}
-                      className="h-12 w-12 rounded-xl cursor-pointer border-0 p-0"
-                    />
-                    <input
-                      type="text"
-                      value={color}
-                      onChange={(e) => setColor(e.target.value)}
-                      className="flex-1 px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all font-mono text-sm uppercase"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                    <ImageIcon className="w-4 h-4 text-slate-400" />
-                    URL da Logo (Opcional)
-                  </label>
-                  <input
-                    type="url"
-                    value={logoUrl}
-                    onChange={(e) => setLogoUrl(e.target.value)}
-                    placeholder="https://site.com/logo.png"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={generating || !url}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {generating ? (
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                  <>Gerar QR Code Dinâmico</>
-                )}
-              </button>
-            </form>
-          </div>
-
-          {/* Preview */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col items-center justify-center min-h-[300px]">
-            <h3 className="text-sm font-medium text-slate-500 mb-6 uppercase tracking-wider">
-              Preview
-            </h3>
-            <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
-              <QRCodeSVG
-                value={url || getPreviewUrl()}
-                size={200}
-                fgColor={color}
-                level="H"
-                imageSettings={
-                  logoUrl
-                    ? {
-                        src: logoUrl,
-                        height: 48,
-                        width: 48,
-                        excavate: true,
-                      }
-                    : undefined
-                }
-              />
-            </div>
-            <p className="text-xs text-slate-400 mt-6 text-center max-w-[200px] truncate">
-              {url || "Insira uma URL para visualizar"}
-            </p>
-          </div>
-        </div>
-
-        {/* List */}
-        <div className="space-y-4">
-          <h2 className="text-xl font-semibold text-slate-900">
-            Seus QR Codes
-          </h2>
-
-          {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[1, 2, 3].map((i) => (
-                <div
-                  key={i}
-                  className="bg-white rounded-2xl border border-slate-200 p-6 h-48 animate-pulse"
-                />
-              ))}
-            </div>
-          ) : qrCodes.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
-              <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <BarChart2 className="w-8 h-8 text-slate-300" />
-              </div>
-              <h3 className="text-lg font-medium text-slate-900">
-                Nenhum QR Code criado
-              </h3>
-              <p className="text-slate-500 mt-1">
-                Crie seu primeiro QR Code dinâmico acima.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {qrCodes.map((qr) => (
+          {/* Main Content Area */}
+          <div className="lg:col-span-2 space-y-6">
+            <AnimatePresence mode="wait">
+              {mode === "rastreavel" && !user ? (
                 <motion.div
+                  key="login"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  key={qr.id}
-                  className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col"
+                  exit={{ opacity: 0, y: -10 }}
+                  className="bg-[#111111] rounded-2xl border border-white/10 p-8 flex flex-col items-center justify-center min-h-[400px]"
                 >
-                  <div className="p-6 flex gap-6 items-center border-b border-slate-100">
-                    <div className="bg-white p-2 rounded-xl shadow-sm border border-slate-100 flex-shrink-0">
-                      <QRCodeSVG
-                        value={`${isMounted && typeof window !== "undefined" ? window.location.origin : ""}/q/${qr.slug}`}
-                        size={80}
-                        fgColor={qr.design_settings?.color || "#000000"}
-                        level="H"
-                        imageSettings={
-                          qr.design_settings?.logo_url
-                            ? {
-                                src: qr.design_settings.logo_url,
-                                height: 20,
-                                width: 20,
-                                excavate: true,
-                              }
-                            : undefined
-                        }
+                  <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-6">
+                    <Lock className="w-8 h-8 text-[#7B48EA]" />
+                  </div>
+                  <h2 className="text-xl font-semibold text-white mb-2">
+                    Acesso Restrito
+                  </h2>
+                  <p className="text-white/50 text-center max-w-sm mb-8">
+                    Faça login para criar QR Codes dinâmicos, encurtar URLs e
+                    rastrear cliques em tempo real.
+                  </p>
+
+                  <form
+                    onSubmit={handleLogin}
+                    className="w-full max-w-sm space-y-4"
+                  >
+                    {authError && (
+                      <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center">
+                        {authError}
+                      </div>
+                    )}
+                    <div>
+                      <input
+                        type="email"
+                        required
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="Seu e-mail"
+                        className="w-full px-4 py-3 rounded-xl bg-[#050505] border border-white/10 focus:border-[#7B48EA] focus:ring-1 focus:ring-[#7B48EA] outline-none transition-all text-white placeholder:text-white/30"
                       />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <BarChart2 className="w-4 h-4 text-indigo-500" />
-                        <span className="text-2xl font-bold text-slate-900">
-                          {qr.clicks}
-                        </span>
-                        <span className="text-sm text-slate-500">cliques</span>
-                      </div>
-                      <p
-                        className="text-sm text-slate-500 truncate"
-                        title={qr.original_url}
-                      >
-                        {qr.original_url}
-                      </p>
+                    <div>
+                      <input
+                        type="password"
+                        required
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Sua senha"
+                        className="w-full px-4 py-3 rounded-xl bg-[#050505] border border-white/10 focus:border-[#7B48EA] focus:ring-1 focus:ring-[#7B48EA] outline-none transition-all text-white placeholder:text-white/30"
+                      />
                     </div>
+                    <button
+                      type="submit"
+                      disabled={authLoading}
+                      className="w-full bg-[#7B48EA] hover:bg-[#6A3DE8] text-white font-medium py-3 px-4 rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {authLoading ? (
+                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        <>
+                          <LogIn className="w-5 h-5" />
+                          Entrar
+                        </>
+                      )}
+                    </button>
+                  </form>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="generator"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="bg-[#111111] rounded-2xl border border-white/10 overflow-hidden"
+                >
+                  <div className="p-6 border-b border-white/5">
+                    <h2 className="text-lg font-semibold flex items-center gap-2 text-white">
+                      <Plus className="w-5 h-5 text-[#7B48EA]" />
+                      {mode === "rastreavel"
+                        ? "Novo QR Code Dinâmico"
+                        : "Gerador de QR Code"}
+                    </h2>
                   </div>
-
-                  <div className="bg-slate-50 p-4 flex items-center justify-between gap-2 mt-auto">
-                    <div className="flex items-center gap-2 overflow-hidden">
-                      <span className="text-xs font-mono text-slate-500 bg-white px-2 py-1 rounded border border-slate-200 truncate">
-                        /q/{qr.slug}
-                      </span>
+                  <form onSubmit={handleGenerate} className="p-6 space-y-6">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-white/70 flex items-center gap-2">
+                        <LinkIcon className="w-4 h-4 text-white/40" />
+                        URL de Destino
+                      </label>
+                      <input
+                        type="url"
+                        required
+                        value={url}
+                        onChange={(e) => setUrl(e.target.value)}
+                        placeholder="https://seusite.com/campanha"
+                        className="w-full px-4 py-3 rounded-xl bg-[#050505] border border-white/10 focus:border-[#7B48EA] focus:ring-1 focus:ring-[#7B48EA] outline-none transition-all text-white placeholder:text-white/30"
+                      />
                     </div>
-                    <div className="flex gap-2">
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-white/70 flex items-center gap-2">
+                          <Palette className="w-4 h-4 text-white/40" />
+                          Cor do QR Code
+                        </label>
+                        <div className="flex gap-3">
+                          <div className="relative w-12 h-12 rounded-xl overflow-hidden border border-white/10 flex-shrink-0">
+                            <input
+                              type="color"
+                              value={color}
+                              onChange={(e) => setColor(e.target.value)}
+                              className="absolute -top-2 -left-2 w-16 h-16 cursor-pointer"
+                            />
+                          </div>
+                          <input
+                            type="text"
+                            value={color}
+                            onChange={(e) => setColor(e.target.value)}
+                            className="flex-1 px-4 py-3 rounded-xl bg-[#050505] border border-white/10 focus:border-[#7B48EA] focus:ring-1 focus:ring-[#7B48EA] outline-none transition-all font-mono text-sm uppercase text-white"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-white/70 flex items-center gap-2">
+                          <ImageIcon className="w-4 h-4 text-white/40" />
+                          Logo Central
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            type="url"
+                            value={logoUrl}
+                            onChange={(e) => {
+                              setLogoUrl(e.target.value);
+                              setLogoFile("");
+                            }}
+                            placeholder="URL da imagem..."
+                            className="flex-1 px-4 py-3 rounded-xl bg-[#050505] border border-white/10 focus:border-[#7B48EA] focus:ring-1 focus:ring-[#7B48EA] outline-none transition-all text-white placeholder:text-white/30 text-sm"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="px-4 py-3 rounded-xl bg-[#222222] hover:bg-[#333333] border border-white/10 transition-colors flex items-center justify-center text-white/70 hover:text-white"
+                            title="Upload de Arquivo"
+                          >
+                            <Upload className="w-5 h-5" />
+                          </button>
+                          <input
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={handleFileUpload}
+                            accept="image/*"
+                            className="hidden"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {mode === "rastreavel" && (
                       <button
-                        onClick={() => handleCopy(qr.slug)}
-                        className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                        title="Copiar Link Curto"
+                        type="submit"
+                        disabled={generating || !url}
+                        className="w-full bg-[#7B48EA] hover:bg-[#6A3DE8] text-white font-medium py-3 px-4 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-[0_4px_20px_rgba(123,72,234,0.3)]"
                       >
-                        {copiedSlug === qr.slug ? (
-                          <Check className="w-4 h-4 text-emerald-500" />
+                        {generating ? (
+                          <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                         ) : (
-                          <Copy className="w-4 h-4" />
+                          <>Salvar QR Code Dinâmico</>
                         )}
                       </button>
-                      <a
-                        href={`/q/${qr.slug}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                        title="Testar Link"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
-                      <button
-                        onClick={() => handleDelete(qr.id)}
-                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Excluir"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
+                    )}
+                  </form>
                 </motion.div>
-              ))}
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Preview & Download */}
+          <div className="bg-[#111111] rounded-2xl border border-white/10 p-6 flex flex-col">
+            <h3 className="text-sm font-medium text-white/50 mb-6 uppercase tracking-wider text-center">
+              Preview
+            </h3>
+
+            <div className="flex-1 flex flex-col items-center justify-center">
+              <div className="bg-white p-4 rounded-2xl shadow-xl">
+                <QRCodeSVG
+                  id="qr-code-svg"
+                  value={qrValue}
+                  size={220}
+                  fgColor={color}
+                  bgColor="#FFFFFF"
+                  level="H"
+                  imageSettings={
+                    activeLogo
+                      ? {
+                          src: activeLogo,
+                          height: 50,
+                          width: 50,
+                          excavate: true,
+                        }
+                      : undefined
+                  }
+                />
+              </div>
+
+              {/* Hidden Canvas for High-Res PNG Download */}
+              <div className="hidden">
+                <QRCodeCanvas
+                  id="qr-code-canvas"
+                  value={qrValue}
+                  size={2000}
+                  fgColor={color}
+                  bgColor="#FFFFFF"
+                  level="H"
+                  imageSettings={
+                    activeLogo
+                      ? {
+                          src: activeLogo,
+                          height: 450,
+                          width: 450,
+                          excavate: true,
+                        }
+                      : undefined
+                  }
+                />
+              </div>
+
+              <p className="text-xs text-white/40 mt-6 text-center max-w-[220px] truncate">
+                {url || "Insira uma URL para visualizar"}
+              </p>
             </div>
-          )}
+
+            <div className="grid grid-cols-2 gap-3 mt-8">
+              <button
+                onClick={downloadPNG}
+                disabled={!url}
+                className="py-2.5 px-4 rounded-xl bg-[#222222] hover:bg-[#333333] border border-white/5 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Download className="w-4 h-4" />
+                PNG
+              </button>
+              <button
+                onClick={downloadSVG}
+                disabled={!url}
+                className="py-2.5 px-4 rounded-xl bg-[#222222] hover:bg-[#333333] border border-white/5 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Download className="w-4 h-4" />
+                SVG
+              </button>
+            </div>
+          </div>
         </div>
+
+        {/* List (Only visible in Rastreável mode when logged in) */}
+        {mode === "rastreavel" && user && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="space-y-6 pt-8 border-t border-white/10"
+          >
+            <h2 className="text-xl font-semibold text-white">Seus QR Codes</h2>
+
+            {loading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    className="bg-[#111111] rounded-2xl border border-white/5 p-6 h-48 animate-pulse"
+                  />
+                ))}
+              </div>
+            ) : qrCodes.length === 0 ? (
+              <div className="bg-[#111111] rounded-2xl border border-white/5 p-12 text-center">
+                <div className="w-16 h-16 bg-[#222222] rounded-full flex items-center justify-center mx-auto mb-4">
+                  <BarChart2 className="w-8 h-8 text-white/20" />
+                </div>
+                <h3 className="text-lg font-medium text-white">
+                  Nenhum QR Code criado
+                </h3>
+                <p className="text-white/50 mt-1">
+                  Crie seu primeiro QR Code dinâmico acima.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {qrCodes.map((qr) => (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    key={qr.id}
+                    className="bg-[#111111] rounded-2xl border border-white/10 overflow-hidden flex flex-col hover:border-white/20 transition-colors"
+                  >
+                    <div className="p-6 flex gap-6 items-center border-b border-white/5">
+                      <div className="bg-white p-2 rounded-xl flex-shrink-0">
+                        <QRCodeSVG
+                          value={`${isMounted && typeof window !== "undefined" ? window.location.origin : ""}/q/${qr.slug}`}
+                          size={72}
+                          fgColor={qr.design_settings?.color || "#000000"}
+                          bgColor="#FFFFFF"
+                          level="H"
+                          imageSettings={
+                            qr.design_settings?.logo_url
+                              ? {
+                                  src: qr.design_settings.logo_url,
+                                  height: 18,
+                                  width: 18,
+                                  excavate: true,
+                                }
+                              : undefined
+                          }
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <BarChart2 className="w-4 h-4 text-[#7B48EA]" />
+                          <span className="text-2xl font-bold text-white">
+                            {qr.clicks}
+                          </span>
+                          <span className="text-sm text-white/50">cliques</span>
+                        </div>
+                        <p
+                          className="text-sm text-white/50 truncate"
+                          title={qr.original_url}
+                        >
+                          {qr.original_url}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="bg-[#0A0A0A] p-4 flex items-center justify-between gap-2 mt-auto">
+                      <div className="flex items-center gap-2 overflow-hidden">
+                        <span className="text-xs font-mono text-white/60 bg-[#222222] px-2 py-1 rounded border border-white/5 truncate">
+                          /q/{qr.slug}
+                        </span>
+                      </div>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => handleCopy(qr.slug)}
+                          className="p-2 text-white/40 hover:text-[#7B48EA] hover:bg-[#7B48EA]/10 rounded-lg transition-colors"
+                          title="Copiar Link Curto"
+                        >
+                          {copiedSlug === qr.slug ? (
+                            <Check className="w-4 h-4 text-emerald-400" />
+                          ) : (
+                            <Copy className="w-4 h-4" />
+                          )}
+                        </button>
+                        <a
+                          href={`/q/${qr.slug}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2 text-white/40 hover:text-[#7B48EA] hover:bg-[#7B48EA]/10 rounded-lg transition-colors"
+                          title="Testar Link"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+                        <button
+                          onClick={() => handleDelete(qr.id)}
+                          className="p-2 text-white/40 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+                          title="Excluir"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
       </div>
     </div>
   );
