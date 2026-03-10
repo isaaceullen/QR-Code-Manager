@@ -74,6 +74,7 @@ export default function Dashboard() {
   const [logoFile, setLogoFile] = useState<string>("");
   const [qrStyle, setQrStyle] = useState<"square" | "dots" | "rounded">("square");
   const [activeTab, setActiveTab] = useState<"qr" | "link">("qr");
+  const [listTab, setListTab] = useState<"qr" | "link">("qr");
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
@@ -211,6 +212,7 @@ export default function Dashboard() {
       setLogoUrl("");
       setLogoFile("");
       setQrStyle("square");
+      setListTab(activeTab);
     }
 
     setGenerating(false);
@@ -259,6 +261,8 @@ export default function Dashboard() {
 
   const activeLogo = logoFile || logoUrl;
   const qrValue = url ? getPreviewUrl() : "https://example.com";
+
+  const filteredQrCodes = qrCodes.filter((qr) => (qr.type || "qr") === listTab);
 
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-[#7B48EA] selection:text-white">
@@ -605,16 +609,58 @@ export default function Dashboard() {
               animate={{ opacity: 1 }}
               className="space-y-6 pt-8 border-t border-white/10"
             >
-              <h2 className="text-xl font-semibold text-white">Seus QR Codes</h2>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <h2 className="text-xl font-semibold text-white">Seus Itens</h2>
+                
+                {/* List Tabs */}
+                <div className="flex p-1 bg-[#111111] border border-white/10 rounded-2xl w-fit">
+                  <button
+                    onClick={() => setListTab("qr")}
+                    className={`relative px-4 py-2 text-sm font-medium rounded-xl transition-colors ${
+                      listTab === "qr" ? "text-white" : "text-white/50 hover:text-white/80"
+                    }`}
+                  >
+                    {listTab === "qr" && (
+                      <motion.div
+                        layoutId="listTab"
+                        className="absolute inset-0 bg-[#7B48EA] rounded-xl"
+                        transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                      />
+                    )}
+                    <span className="relative z-10 flex items-center gap-2">
+                      <QrCode className="w-4 h-4" />
+                      Meus QR Codes
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => setListTab("link")}
+                    className={`relative px-4 py-2 text-sm font-medium rounded-xl transition-colors ${
+                      listTab === "link" ? "text-white" : "text-white/50 hover:text-white/80"
+                    }`}
+                  >
+                    {listTab === "link" && (
+                      <motion.div
+                        layoutId="listTab"
+                        className="absolute inset-0 bg-[#7B48EA] rounded-xl"
+                        transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                      />
+                    )}
+                    <span className="relative z-10 flex items-center gap-2">
+                      <LinkIcon className="w-4 h-4" />
+                      Meus Links
+                    </span>
+                  </button>
+                </div>
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                 <div className="bg-[#111111] rounded-2xl border border-[#7B48EA]/30 p-6">
                   <div className="flex items-center gap-3 mb-2">
-                    <QrCode className="w-5 h-5 text-[#7B48EA]" />
-                    <h3 className="text-white/70 font-medium">Total de QRs</h3>
+                    {listTab === "qr" ? <QrCode className="w-5 h-5 text-[#7B48EA]" /> : <LinkIcon className="w-5 h-5 text-[#7B48EA]" />}
+                    <h3 className="text-white/70 font-medium">Total de {listTab === "qr" ? "QRs" : "Links"}</h3>
                   </div>
                   <p className="text-3xl font-bold text-white">
-                    {qrCodes.length}
+                    {filteredQrCodes.length}
                   </p>
                 </div>
                 <div className="bg-[#111111] rounded-2xl border border-[#7B48EA]/30 p-6">
@@ -625,7 +671,7 @@ export default function Dashboard() {
                     </h3>
                   </div>
                   <p className="text-3xl font-bold text-white">
-                    {qrCodes.reduce((acc, qr) => acc + (qr.clicks || 0), 0)}
+                    {filteredQrCodes.reduce((acc, qr) => acc + (qr.clicks || 0), 0)}
                   </p>
                 </div>
                 <div className="bg-[#111111] rounded-2xl border border-[#7B48EA]/30 p-6">
@@ -636,21 +682,21 @@ export default function Dashboard() {
                   <p
                     className="text-lg font-bold text-white truncate"
                     title={
-                      qrCodes.length > 0
-                        ? qrCodes.reduce((prev, current) =>
+                      filteredQrCodes.length > 0
+                        ? filteredQrCodes.reduce((prev, current) =>
                             prev.clicks > current.clicks ? prev : current,
                           ).title ||
-                          qrCodes.reduce((prev, current) =>
+                          filteredQrCodes.reduce((prev, current) =>
                             prev.clicks > current.clicks ? prev : current,
                           ).original_url
                         : "Nenhum"
                     }
                   >
-                    {qrCodes.length > 0
-                      ? qrCodes.reduce((prev, current) =>
+                    {filteredQrCodes.length > 0
+                      ? filteredQrCodes.reduce((prev, current) =>
                           prev.clicks > current.clicks ? prev : current,
                         ).title ||
-                        qrCodes.reduce((prev, current) =>
+                        filteredQrCodes.reduce((prev, current) =>
                           prev.clicks > current.clicks ? prev : current,
                         ).original_url
                       : "Nenhum"}
@@ -667,21 +713,21 @@ export default function Dashboard() {
                     />
                   ))}
                 </div>
-              ) : qrCodes.length === 0 ? (
+              ) : filteredQrCodes.length === 0 ? (
                 <div className="bg-[#111111] rounded-2xl border border-white/5 p-12 text-center">
                   <div className="w-16 h-16 bg-[#222222] rounded-full flex items-center justify-center mx-auto mb-4">
                     <BarChart2 className="w-8 h-8 text-white/20" />
                   </div>
                   <h3 className="text-lg font-medium text-white">
-                    Nenhum QR Code criado
+                    Nenhum {listTab === "qr" ? "QR Code" : "Link Curto"} criado
                   </h3>
                   <p className="text-white/50 mt-1">
-                    Crie seu primeiro QR Code dinâmico acima.
+                    Crie seu primeiro {listTab === "qr" ? "QR Code" : "Link Curto"} acima.
                   </p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {qrCodes.map((qr) => (
+                  {filteredQrCodes.map((qr) => (
                     <motion.div
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
