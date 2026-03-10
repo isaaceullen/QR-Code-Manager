@@ -33,6 +33,7 @@ type QRCodeData = {
   user_id?: string;
   original_url: string;
   slug: string;
+  type?: "qr" | "link";
   design_settings: {
     color: string;
     logo_url: string;
@@ -75,6 +76,7 @@ export default function Dashboard() {
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
   const [selectedQrCode, setSelectedQrCode] = useState<string | null>(null);
   const [selectedQrCodeTitle, setSelectedQrCodeTitle] = useState<string>("");
+  const [itemType, setItemType] = useState<"qr" | "link">("qr");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -98,8 +100,8 @@ export default function Dashboard() {
     const { data, error } = await query;
 
     if (error) {
-      console.error("Error fetching QR codes:", error);
-      setError("Erro ao carregar QR Codes.");
+      console.error("Error fetching items:", error);
+      setError("Erro ao carregar itens.");
     } else {
       setQrCodes(data || []);
     }
@@ -177,10 +179,12 @@ export default function Dashboard() {
     const finalLogo = logoFile || logoUrl;
 
     const newQrCode = {
-      title: title || "QR Code Sem Título",
+      title:
+        title || (itemType === "qr" ? "QR Code Sem Título" : "Link Sem Título"),
       user_id: user.id,
       original_url: url,
       slug,
+      type: itemType,
       design_settings: {
         color,
         logo_url: finalLogo,
@@ -196,7 +200,7 @@ export default function Dashboard() {
 
     if (insertError) {
       console.error("Error generating QR code:", insertError);
-      setError("Erro ao criar QR Code. Verifique as configurações do banco.");
+      setError("Erro ao criar item. Verifique as configurações do banco.");
     } else if (data) {
       setQrCodes([data, ...qrCodes]);
       setUrl("");
@@ -326,7 +330,14 @@ export default function Dashboard() {
       {/* Sticky Header */}
       <header className="sticky top-0 z-40 bg-[#050505] border-b border-[#7B48EA]/30 px-4 md:px-8 py-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center">
-          <Image src="https://i.imgur.com/864yjao.png" alt="Camerite" width={120} height={40} className="max-h-8 md:max-h-10 w-auto" referrerPolicy="no-referrer" />
+          <Image
+            src="https://i.imgur.com/864yjao.png"
+            alt="Camerite"
+            width={120}
+            height={40}
+            className="max-h-8 md:max-h-10 w-auto"
+            referrerPolicy="no-referrer"
+          />
         </div>
         {user && (
           <button
@@ -347,18 +358,22 @@ export default function Dashboard() {
               animate={{ opacity: 1, y: 0 }}
               className="bg-[#111111] rounded-2xl border border-white/10 p-8 flex flex-col items-center justify-center w-full max-w-md shadow-xl"
             >
-              <Image src="https://i.imgur.com/864yjao.png" alt="Camerite" width={150} height={40} className="h-10 w-auto mb-8" referrerPolicy="no-referrer" />
+              <Image
+                src="https://i.imgur.com/864yjao.png"
+                alt="Camerite"
+                width={150}
+                height={40}
+                className="h-10 w-auto mb-8"
+                referrerPolicy="no-referrer"
+              />
               <h2 className="text-xl font-semibold text-white mb-2">
                 Acesso Restrito
               </h2>
               <p className="text-white/50 text-center mb-8">
-                Faça login para gerenciar seus QR Codes.
+                Faça login para gerenciar seus QR Codes e Links Rastreáveis.
               </p>
 
-              <form
-                onSubmit={handleLogin}
-                className="w-full space-y-4"
-              >
+              <form onSubmit={handleLogin} className="w-full space-y-4">
                 {authError && (
                   <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center">
                     {authError}
@@ -405,7 +420,9 @@ export default function Dashboard() {
           <>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               {/* Main Content Area */}
-              <div className="lg:col-span-2 space-y-6">
+              <div
+                className={`${itemType === "qr" ? "lg:col-span-2" : "lg:col-span-3"} space-y-6`}
+              >
                 <motion.div
                   key="generator"
                   initial={{ opacity: 0, y: 10 }}
@@ -415,14 +432,39 @@ export default function Dashboard() {
                   <div className="p-6 border-b border-white/5">
                     <h2 className="text-lg font-semibold flex items-center gap-2 text-white">
                       <Plus className="w-5 h-5 text-[#7B48EA]" />
-                      Novo QR Code Dinâmico
+                      Novo Item
                     </h2>
                   </div>
                   <form onSubmit={handleGenerate} className="p-6 space-y-6">
+                    <div className="flex gap-4 p-1 bg-[#050505] rounded-xl border border-white/10 w-fit">
+                      <button
+                        type="button"
+                        onClick={() => setItemType("qr")}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          itemType === "qr"
+                            ? "bg-[#222222] text-white shadow-sm"
+                            : "text-white/50 hover:text-white hover:bg-white/5"
+                        }`}
+                      >
+                        QR Code + Link
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setItemType("link")}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          itemType === "link"
+                            ? "bg-[#222222] text-white shadow-sm"
+                            : "text-white/50 hover:text-white hover:bg-white/5"
+                        }`}
+                      >
+                        Apenas Link Rastreável
+                      </button>
+                    </div>
+
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-white/70 flex items-center gap-2">
                         <Type className="w-4 h-4 text-white/40" />
-                        Título do QR Code
+                        Título
                       </label>
                       <input
                         type="text"
@@ -447,64 +489,66 @@ export default function Dashboard() {
                       />
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-white/70 flex items-center gap-2">
-                          <Palette className="w-4 h-4 text-white/40" />
-                          Cor do QR Code
-                        </label>
-                        <div className="flex gap-3">
-                          <div className="relative w-12 h-12 rounded-xl overflow-hidden border border-white/10 flex-shrink-0">
+                    {itemType === "qr" && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-white/70 flex items-center gap-2">
+                            <Palette className="w-4 h-4 text-white/40" />
+                            Cor do QR Code
+                          </label>
+                          <div className="flex gap-3">
+                            <div className="relative w-12 h-12 rounded-xl overflow-hidden border border-white/10 flex-shrink-0">
+                              <input
+                                type="color"
+                                value={color}
+                                onChange={(e) => setColor(e.target.value)}
+                                className="absolute -top-2 -left-2 w-16 h-16 cursor-pointer"
+                              />
+                            </div>
                             <input
-                              type="color"
+                              type="text"
                               value={color}
                               onChange={(e) => setColor(e.target.value)}
-                              className="absolute -top-2 -left-2 w-16 h-16 cursor-pointer"
+                              className="flex-1 px-4 py-3 rounded-xl bg-[#050505] border border-white/10 focus:border-[#7B48EA] focus:ring-1 focus:ring-[#7B48EA] outline-none transition-all font-mono text-sm uppercase text-white"
                             />
                           </div>
-                          <input
-                            type="text"
-                            value={color}
-                            onChange={(e) => setColor(e.target.value)}
-                            className="flex-1 px-4 py-3 rounded-xl bg-[#050505] border border-white/10 focus:border-[#7B48EA] focus:ring-1 focus:ring-[#7B48EA] outline-none transition-all font-mono text-sm uppercase text-white"
-                          />
                         </div>
-                      </div>
 
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-white/70 flex items-center gap-2">
-                          <ImageIcon className="w-4 h-4 text-white/40" />
-                          Logo Central
-                        </label>
-                        <div className="flex gap-2">
-                          <input
-                            type="url"
-                            value={logoUrl}
-                            onChange={(e) => {
-                              setLogoUrl(e.target.value);
-                              setLogoFile("");
-                            }}
-                            placeholder="URL da imagem..."
-                            className="flex-1 px-4 py-3 rounded-xl bg-[#050505] border border-white/10 focus:border-[#7B48EA] focus:ring-1 focus:ring-[#7B48EA] outline-none transition-all text-white placeholder:text-white/30 text-sm"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => fileInputRef.current?.click()}
-                            className="px-4 py-3 rounded-xl bg-[#222222] hover:bg-[#333333] border border-white/10 transition-colors flex items-center justify-center text-white/70 hover:text-white"
-                            title="Upload de Arquivo"
-                          >
-                            <Upload className="w-5 h-5" />
-                          </button>
-                          <input
-                            type="file"
-                            ref={fileInputRef}
-                            onChange={handleFileUpload}
-                            accept="image/*"
-                            className="hidden"
-                          />
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-white/70 flex items-center gap-2">
+                            <ImageIcon className="w-4 h-4 text-white/40" />
+                            Logo Central
+                          </label>
+                          <div className="flex gap-2">
+                            <input
+                              type="url"
+                              value={logoUrl}
+                              onChange={(e) => {
+                                setLogoUrl(e.target.value);
+                                setLogoFile("");
+                              }}
+                              placeholder="URL da imagem..."
+                              className="flex-1 px-4 py-3 rounded-xl bg-[#050505] border border-white/10 focus:border-[#7B48EA] focus:ring-1 focus:ring-[#7B48EA] outline-none transition-all text-white placeholder:text-white/30 text-sm"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => fileInputRef.current?.click()}
+                              className="px-4 py-3 rounded-xl bg-[#222222] hover:bg-[#333333] border border-white/10 transition-colors flex items-center justify-center text-white/70 hover:text-white"
+                              title="Upload de Arquivo"
+                            >
+                              <Upload className="w-5 h-5" />
+                            </button>
+                            <input
+                              type="file"
+                              ref={fileInputRef}
+                              onChange={handleFileUpload}
+                              accept="image/*"
+                              className="hidden"
+                            />
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    )}
 
                     <button
                       type="submit"
@@ -514,7 +558,12 @@ export default function Dashboard() {
                       {generating ? (
                         <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                       ) : (
-                        <>Salvar QR Code Dinâmico</>
+                        <>
+                          Salvar{" "}
+                          {itemType === "qr"
+                            ? "QR Code Dinâmico"
+                            : "Link Rastreável"}
+                        </>
                       )}
                     </button>
                   </form>
@@ -522,79 +571,81 @@ export default function Dashboard() {
               </div>
 
               {/* Preview & Download */}
-              <div className="bg-[#111111] rounded-2xl border border-white/10 p-6 flex flex-col">
-                <h3 className="text-sm font-medium text-white/50 mb-6 uppercase tracking-wider text-center">
-                  Preview
-                </h3>
+              {itemType === "qr" && (
+                <div className="bg-[#111111] rounded-2xl border border-white/10 p-6 flex flex-col">
+                  <h3 className="text-sm font-medium text-white/50 mb-6 uppercase tracking-wider text-center">
+                    Preview
+                  </h3>
 
-                <div className="flex-1 flex flex-col items-center justify-center">
-                  <div className="bg-white p-4 rounded-2xl shadow-xl">
-                    <QRCodeSVG
-                      id="qr-code-svg"
-                      value={qrValue}
-                      size={220}
-                      fgColor={color}
-                      bgColor="#FFFFFF"
-                      level="H"
-                      imageSettings={
-                        activeLogo
-                          ? {
-                              src: activeLogo,
-                              height: 50,
-                              width: 50,
-                              excavate: true,
-                            }
-                          : undefined
-                      }
-                    />
+                  <div className="flex-1 flex flex-col items-center justify-center">
+                    <div className="bg-white p-4 rounded-2xl shadow-xl">
+                      <QRCodeSVG
+                        id="qr-code-svg"
+                        value={qrValue}
+                        size={220}
+                        fgColor={color}
+                        bgColor="#FFFFFF"
+                        level="H"
+                        imageSettings={
+                          activeLogo
+                            ? {
+                                src: activeLogo,
+                                height: 50,
+                                width: 50,
+                                excavate: true,
+                              }
+                            : undefined
+                        }
+                      />
+                    </div>
+
+                    {/* Hidden Canvas for High-Res PNG Download */}
+                    <div className="hidden">
+                      <QRCodeCanvas
+                        id="qr-code-canvas"
+                        value={qrValue}
+                        size={2000}
+                        fgColor={color}
+                        bgColor="#FFFFFF"
+                        level="H"
+                        imageSettings={
+                          activeLogo
+                            ? {
+                                src: activeLogo,
+                                height: 450,
+                                width: 450,
+                                excavate: true,
+                              }
+                            : undefined
+                        }
+                      />
+                    </div>
+
+                    <p className="text-xs text-white/40 mt-6 text-center max-w-[220px] truncate">
+                      {url || "Insira uma URL para visualizar"}
+                    </p>
                   </div>
 
-                  {/* Hidden Canvas for High-Res PNG Download */}
-                  <div className="hidden">
-                    <QRCodeCanvas
-                      id="qr-code-canvas"
-                      value={qrValue}
-                      size={2000}
-                      fgColor={color}
-                      bgColor="#FFFFFF"
-                      level="H"
-                      imageSettings={
-                        activeLogo
-                          ? {
-                              src: activeLogo,
-                              height: 450,
-                              width: 450,
-                              excavate: true,
-                            }
-                          : undefined
-                      }
-                    />
+                  <div className="grid grid-cols-2 gap-3 mt-8">
+                    <button
+                      onClick={downloadPNG}
+                      disabled={!url}
+                      className="py-2.5 px-4 rounded-xl bg-[#222222] hover:bg-[#333333] border border-white/5 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Download className="w-4 h-4" />
+                      PNG
+                    </button>
+                    <button
+                      onClick={downloadSVG}
+                      disabled={!url}
+                      className="py-2.5 px-4 rounded-xl bg-[#222222] hover:bg-[#333333] border border-white/5 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Download className="w-4 h-4" />
+                      SVG
+                    </button>
                   </div>
-
-                  <p className="text-xs text-white/40 mt-6 text-center max-w-[220px] truncate">
-                    {url || "Insira uma URL para visualizar"}
-                  </p>
                 </div>
-
-                <div className="grid grid-cols-2 gap-3 mt-8">
-                  <button
-                    onClick={downloadPNG}
-                    disabled={!url}
-                    className="py-2.5 px-4 rounded-xl bg-[#222222] hover:bg-[#333333] border border-white/5 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Download className="w-4 h-4" />
-                    PNG
-                  </button>
-                  <button
-                    onClick={downloadSVG}
-                    disabled={!url}
-                    className="py-2.5 px-4 rounded-xl bg-[#222222] hover:bg-[#333333] border border-white/5 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Download className="w-4 h-4" />
-                    SVG
-                  </button>
-                </div>
-              </div>
+              )}
             </div>
 
             {/* List */}
@@ -603,13 +654,15 @@ export default function Dashboard() {
               animate={{ opacity: 1 }}
               className="space-y-6 pt-8 border-t border-white/10"
             >
-              <h2 className="text-xl font-semibold text-white">Seus QR Codes</h2>
+              <h2 className="text-xl font-semibold text-white">Seus Itens</h2>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                 <div className="bg-[#111111] rounded-2xl border border-[#7B48EA]/30 p-6">
                   <div className="flex items-center gap-3 mb-2">
                     <QrCode className="w-5 h-5 text-[#7B48EA]" />
-                    <h3 className="text-white/70 font-medium">Total de QRs</h3>
+                    <h3 className="text-white/70 font-medium">
+                      Total de Itens
+                    </h3>
                   </div>
                   <p className="text-3xl font-bold text-white">
                     {qrCodes.length}
@@ -671,10 +724,10 @@ export default function Dashboard() {
                     <BarChart2 className="w-8 h-8 text-white/20" />
                   </div>
                   <h3 className="text-lg font-medium text-white">
-                    Nenhum QR Code criado
+                    Nenhum item criado
                   </h3>
                   <p className="text-white/50 mt-1">
-                    Crie seu primeiro QR Code dinâmico acima.
+                    Crie seu primeiro QR Code ou Link Rastreável acima.
                   </p>
                 </div>
               ) : (
@@ -686,39 +739,65 @@ export default function Dashboard() {
                       key={qr.id}
                       className="bg-[#111111] rounded-2xl border border-white/10 overflow-hidden flex flex-col hover:border-white/20 transition-colors"
                     >
-                      <div 
+                      <div
                         className="p-6 flex gap-6 items-center border-b border-white/5 cursor-pointer hover:bg-white/5 transition-colors"
                         onClick={() => {
                           setSelectedQrCode(qr.id);
                           setSelectedQrCodeTitle(qr.title || qr.slug);
                         }}
                       >
-                        <div className="bg-white p-2 rounded-xl flex-shrink-0">
-                          <QRCodeSVG
-                            value={`${isMounted && typeof window !== "undefined" ? window.location.origin : ""}/q/${qr.slug}`}
-                            size={72}
-                            fgColor={qr.design_settings?.color || "#000000"}
-                            bgColor="#FFFFFF"
-                            level="H"
-                            imageSettings={
-                              qr.design_settings?.logo_url
-                                ? {
-                                    src: qr.design_settings.logo_url,
-                                    height: 18,
-                                    width: 18,
-                                    excavate: true,
-                                  }
-                                : undefined
-                            }
-                          />
-                        </div>
+                        {qr.type !== "link" ? (
+                          <div className="bg-white p-2 rounded-xl flex-shrink-0">
+                            <QRCodeSVG
+                              value={`${isMounted && typeof window !== "undefined" ? window.location.origin : ""}/q/${qr.slug}`}
+                              size={72}
+                              fgColor={qr.design_settings?.color || "#000000"}
+                              bgColor="#FFFFFF"
+                              level="H"
+                              imageSettings={
+                                qr.design_settings?.logo_url
+                                  ? {
+                                      src: qr.design_settings.logo_url,
+                                      height: 18,
+                                      width: 18,
+                                      excavate: true,
+                                    }
+                                  : undefined
+                              }
+                            />
+                          </div>
+                        ) : (
+                          <div className="bg-[#222222] p-4 rounded-xl flex-shrink-0 flex items-center justify-center w-[88px] h-[88px]">
+                            <LinkIcon className="w-8 h-8 text-[#7B48EA]" />
+                          </div>
+                        )}
                         <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              {qr.type === "link" ? (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-500/20 text-blue-400 border border-blue-500/20">
+                                  Link
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/20">
+                                  QR Code
+                                </span>
+                              )}
+                              <span className="text-xs text-white/40">
+                                {new Date(qr.created_at).toLocaleDateString(
+                                  "pt-BR",
+                                )}
+                              </span>
+                            </div>
+                          </div>
                           <div className="flex items-center gap-2 mb-1">
                             <BarChart2 className="w-4 h-4 text-[#7B48EA]" />
                             <span className="text-2xl font-bold text-white">
                               {qr.clicks}
                             </span>
-                            <span className="text-sm text-white/50">cliques</span>
+                            <span className="text-sm text-white/50">
+                              cliques
+                            </span>
                           </div>
                           {qr.title && (
                             <p
@@ -738,44 +817,46 @@ export default function Dashboard() {
                       </div>
 
                       {/* Hidden Canvas for High-Res PNG Download */}
-                      <div className="hidden">
-                        <QRCodeSVG
-                          id={`qr-svg-${qr.id}`}
-                          value={`${isMounted && typeof window !== "undefined" ? window.location.origin : ""}/q/${qr.slug}`}
-                          size={2000}
-                          fgColor={qr.design_settings?.color || "#000000"}
-                          bgColor="#FFFFFF"
-                          level="H"
-                          imageSettings={
-                            qr.design_settings?.logo_url
-                              ? {
-                                  src: qr.design_settings.logo_url,
-                                  height: 450,
-                                  width: 450,
-                                  excavate: true,
-                                }
-                              : undefined
-                          }
-                        />
-                        <QRCodeCanvas
-                          id={`qr-canvas-${qr.id}`}
-                          value={`${isMounted && typeof window !== "undefined" ? window.location.origin : ""}/q/${qr.slug}`}
-                          size={2000}
-                          fgColor={qr.design_settings?.color || "#000000"}
-                          bgColor="#FFFFFF"
-                          level="H"
-                          imageSettings={
-                            qr.design_settings?.logo_url
-                              ? {
-                                  src: qr.design_settings.logo_url,
-                                  height: 450,
-                                  width: 450,
-                                  excavate: true,
-                                }
-                              : undefined
-                          }
-                        />
-                      </div>
+                      {qr.type !== "link" && (
+                        <div className="hidden">
+                          <QRCodeSVG
+                            id={`qr-svg-${qr.id}`}
+                            value={`${isMounted && typeof window !== "undefined" ? window.location.origin : ""}/q/${qr.slug}`}
+                            size={2000}
+                            fgColor={qr.design_settings?.color || "#000000"}
+                            bgColor="#FFFFFF"
+                            level="H"
+                            imageSettings={
+                              qr.design_settings?.logo_url
+                                ? {
+                                    src: qr.design_settings.logo_url,
+                                    height: 450,
+                                    width: 450,
+                                    excavate: true,
+                                  }
+                                : undefined
+                            }
+                          />
+                          <QRCodeCanvas
+                            id={`qr-canvas-${qr.id}`}
+                            value={`${isMounted && typeof window !== "undefined" ? window.location.origin : ""}/q/${qr.slug}`}
+                            size={2000}
+                            fgColor={qr.design_settings?.color || "#000000"}
+                            bgColor="#FFFFFF"
+                            level="H"
+                            imageSettings={
+                              qr.design_settings?.logo_url
+                                ? {
+                                    src: qr.design_settings.logo_url,
+                                    height: 450,
+                                    width: 450,
+                                    excavate: true,
+                                  }
+                                : undefined
+                            }
+                          />
+                        </div>
+                      )}
 
                       <div className="bg-[#0A0A0A] p-4 flex items-center justify-between gap-2 mt-auto">
                         <div className="flex items-center gap-2 overflow-hidden">
@@ -784,24 +865,34 @@ export default function Dashboard() {
                           </span>
                         </div>
                         <div className="flex gap-1">
-                          <button
-                            onClick={() =>
-                              downloadListItemPNG(qr.id, qr.title || qr.slug)
-                            }
-                            className="p-2 text-white/40 hover:text-[#7B48EA] hover:bg-[#7B48EA]/10 rounded-lg transition-colors"
-                            title="Baixar PNG"
-                          >
-                            <Download className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() =>
-                              downloadListItemSVG(qr.id, qr.title || qr.slug)
-                            }
-                            className="p-2 text-white/40 hover:text-[#7B48EA] hover:bg-[#7B48EA]/10 rounded-lg transition-colors"
-                            title="Baixar SVG"
-                          >
-                            <Download className="w-4 h-4" />
-                          </button>
+                          {qr.type !== "link" && (
+                            <>
+                              <button
+                                onClick={() =>
+                                  downloadListItemPNG(
+                                    qr.id,
+                                    qr.title || qr.slug,
+                                  )
+                                }
+                                className="p-2 text-white/40 hover:text-[#7B48EA] hover:bg-[#7B48EA]/10 rounded-lg transition-colors"
+                                title="Baixar PNG"
+                              >
+                                <Download className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() =>
+                                  downloadListItemSVG(
+                                    qr.id,
+                                    qr.title || qr.slug,
+                                  )
+                                }
+                                className="p-2 text-white/40 hover:text-[#7B48EA] hover:bg-[#7B48EA]/10 rounded-lg transition-colors"
+                                title="Baixar SVG"
+                              >
+                                <Download className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
                           <button
                             onClick={() => handleCopy(qr.slug)}
                             className="p-2 text-white/40 hover:text-[#7B48EA] hover:bg-[#7B48EA]/10 rounded-lg transition-colors"

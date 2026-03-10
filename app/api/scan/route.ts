@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { supabase, trackClickAndLogAnalytics } from "@/lib/supabase";
 import { UAParser } from "ua-parser-js";
 
 export async function POST(request: Request) {
@@ -10,15 +10,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Slug is required" }, { status: 400 });
     }
 
-    // Fetch the QR code
-    const { data: qrCode, error: fetchError } = await supabase
+    // Fetch the QR code or Link
+    const { data: item, error: fetchError } = await supabase
       .from("qr_codes")
-      .select("id, original_url, clicks")
+      .select("id, original_url, clicks, type")
       .eq("slug", slug)
       .single();
 
-    if (fetchError || !qrCode) {
-      return NextResponse.json({ error: "QR Code not found" }, { status: 404 });
+    if (fetchError || !item) {
+      return NextResponse.json({ error: "Item not found" }, { status: 404 });
     }
 
     // Get headers
@@ -44,25 +44,16 @@ export async function POST(request: Request) {
 
     const browser = result.browser.name || "Desconhecido";
 
-    // Increment clicks
-    await supabase
-      .from("qr_codes")
-      .update({ clicks: (qrCode.clicks || 0) + 1 })
-      .eq("id", qrCode.id);
+    // Track click and log analytics using the centralized function
+    await trackClickAndLogAnalytics(item.id, item.clicks || 0, {
+      city,
+      country,
+      region,
+      device: deviceType,
+      browser,
+    });
 
-    // Insert scan analytics
-    await supabase.from("qr_scans").insert([
-      {
-        qr_code_id: qrCode.id,
-        city,
-        country,
-        region,
-        device: deviceType,
-        browser,
-      },
-    ]);
-
-    let redirectUrl = qrCode.original_url;
+    let redirectUrl = item.original_url;
     if (
       !redirectUrl.startsWith("http://") &&
       !redirectUrl.startsWith("https://")
@@ -70,7 +61,7 @@ export async function POST(request: Request) {
       redirectUrl = "https://" + redirectUrl;
     }
 
-    return NextResponse.json({ redirectUrl });
+    return NextResponse.json({ redirectUrl, type: item.type || 'qr' });
   } catch (error) {
     console.error("Scan error:", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
