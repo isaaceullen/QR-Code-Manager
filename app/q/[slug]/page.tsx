@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
 
@@ -21,13 +20,15 @@ export default function RedirectPage() {
 
     const processRedirect = async () => {
       try {
-        const { data, error: fetchError } = await supabase
-          .from("qr_codes")
-          .select("id, original_url, clicks")
-          .eq("slug", slug)
-          .single();
+        const response = await fetch("/api/scan", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ slug }),
+        });
 
-        if (fetchError || !data) {
+        if (!response.ok) {
           setError(true);
           setTimeout(() => {
             router.push("/");
@@ -35,24 +36,11 @@ export default function RedirectPage() {
           return;
         }
 
+        const data = await response.json();
+
         // Delay to show the brand
-        setTimeout(async () => {
-          // Increment clicks via API to also parse UA
-          try {
-            await fetch(`/api/scan?slug=${slug}`);
-          } catch (e) {
-            console.error("Failed to track scan:", e);
-          }
-
-          let redirectUrl = data.original_url;
-          if (
-            !redirectUrl.startsWith("http://") &&
-            !redirectUrl.startsWith("https://")
-          ) {
-            redirectUrl = "https://" + redirectUrl;
-          }
-
-          window.location.href = redirectUrl;
+        setTimeout(() => {
+          window.location.href = data.redirectUrl;
         }, 1500);
       } catch (err) {
         console.error("Redirect error:", err);
@@ -94,8 +82,13 @@ export default function RedirectPage() {
         <div className="w-8 h-8 border-2 border-white/10 border-t-[#7B48EA] rounded-full animate-spin mb-6" />
         
         {/* Message */}
-        <p className="text-white/70 text-sm md:text-base text-center font-medium">
+        <p className="text-white/70 text-sm md:text-base text-center font-medium mb-2">
           Estamos redirecionando você. Aguarde...
+        </p>
+        
+        {/* Footer Text */}
+        <p className="text-white/30 text-xs text-center">
+          Processando conexão segura...
         </p>
       </div>
     </div>

@@ -99,7 +99,7 @@ export default function AnalyticsModal({
                 Detalhes de Acesso
               </h2>
               <p className="text-white/50 text-sm mt-1">
-                {qrCodeTitle || "Item"}
+                {qrCodeTitle || "QR Code"}
               </p>
             </div>
             <button
@@ -123,7 +123,7 @@ export default function AnalyticsModal({
                   Nenhum acesso registrado
                 </h3>
                 <p className="text-white/50 mt-1">
-                  Este item ainda não recebeu cliques.
+                  Este QR Code ainda não recebeu cliques.
                 </p>
               </div>
             ) : (
