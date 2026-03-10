@@ -2,46 +2,77 @@ import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { UAParser } from "ua-parser-js";
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const slug = searchParams.get("slug");
-
-  if (!slug) {
-    return NextResponse.json({ error: "Missing slug" }, { status: 400 });
-  }
-
+export async function POST(request: Request) {
   try {
-    const { data, error } = await supabase
+    const { slug } = await request.json();
+
+    if (!slug) {
+      return NextResponse.json({ error: "Slug is required" }, { status: 400 });
+    }
+
+    // Fetch the QR code
+    const { data: qrCode, error: fetchError } = await supabase
       .from("qr_codes")
       .select("id, original_url, clicks")
       .eq("slug", slug)
       .single();
 
-    if (error || !data) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (fetchError || !qrCode) {
+      return NextResponse.json({ error: "QR Code not found" }, { status: 404 });
     }
 
+    // Get headers
+    const city = request.headers.get("x-vercel-ip-city") || "Desconhecida";
+    const country = request.headers.get("x-vercel-ip-country") || "Desconhecido";
+    const region = request.headers.get("x-vercel-ip-country-region") || "Desconhecida";
     const userAgent = request.headers.get("user-agent") || "";
+
+    // Parse User Agent
     const parser = new UAParser(userAgent);
     const result = parser.getResult();
+    
+    let deviceType = "PC";
+    if (result.device.type === "mobile") {
+      deviceType = result.os.name === "iOS" ? "iOS" : "Android";
+    } else if (result.device.type === "tablet") {
+      deviceType = "Tablet";
+    } else if (result.os.name === "Mac OS") {
+      deviceType = "Mac";
+    } else if (result.os.name === "Windows") {
+      deviceType = "Windows";
+    }
+
+    const browser = result.browser.name || "Desconhecido";
 
     // Increment clicks
     await supabase
       .from("qr_codes")
-      .update({ clicks: (data.clicks || 0) + 1 })
-      .eq("id", data.id);
+      .update({ clicks: (qrCode.clicks || 0) + 1 })
+      .eq("id", qrCode.id);
 
-    return NextResponse.json({
-      success: true,
-      original_url: data.original_url,
-      analytics: {
-        browser: result.browser.name,
-        os: result.os.name,
-        device: result.device.type || "desktop",
-      }
-    });
+    // Insert scan analytics
+    await supabase.from("qr_scans").insert([
+      {
+        qr_code_id: qrCode.id,
+        city,
+        country,
+        region,
+        device: deviceType,
+        browser,
+      },
+    ]);
+
+    let redirectUrl = qrCode.original_url;
+    if (
+      !redirectUrl.startsWith("http://") &&
+      !redirectUrl.startsWith("https://")
+    ) {
+      redirectUrl = "https://" + redirectUrl;
+    }
+
+    return NextResponse.json({ redirectUrl });
   } catch (error) {
-    console.error("Scan API error:", error);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    console.error("Scan error:", error);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
