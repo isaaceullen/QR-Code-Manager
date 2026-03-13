@@ -21,13 +21,15 @@ export default function RedirectPage() {
 
     const processRedirect = async () => {
       try {
-        const { data, error: fetchError } = await supabase
-          .from("qr_codes")
-          .select("id, original_url, clicks")
-          .eq("slug", slug)
-          .single();
+        const response = await fetch("/api/scan", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ slug }),
+        });
 
-        if (fetchError || !data) {
+        if (!response.ok) {
           setError(true);
           setTimeout(() => {
             router.push("/");
@@ -35,24 +37,11 @@ export default function RedirectPage() {
           return;
         }
 
+        const data = await response.json();
+
         // Delay to show the brand
-        setTimeout(async () => {
-          // Increment clicks via API to also parse UA
-          try {
-            await fetch(`/api/scan?slug=${slug}`);
-          } catch (e) {
-            console.error("Failed to track scan:", e);
-          }
-
-          let redirectUrl = data.original_url;
-          if (
-            !redirectUrl.startsWith("http://") &&
-            !redirectUrl.startsWith("https://")
-          ) {
-            redirectUrl = "https://" + redirectUrl;
-          }
-
-          window.location.href = redirectUrl;
+        setTimeout(() => {
+          window.location.href = data.redirectUrl;
         }, 1500);
       } catch (err) {
         console.error("Redirect error:", err);

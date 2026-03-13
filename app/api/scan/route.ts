@@ -45,13 +45,17 @@ export async function POST(request: Request) {
     const browser = result.browser.name || "Desconhecido";
 
     // Track click and log analytics using the centralized function
-    await trackClickAndLogAnalytics(item.id, item.clicks || 0, {
+    const analyticsResult = await trackClickAndLogAnalytics(item.id, item.clicks || 0, {
       city,
       country,
       region,
       device: deviceType,
       browser,
     });
+
+    if (!analyticsResult.success) {
+      console.error("Failed to track click and log analytics:", analyticsResult.error);
+    }
 
     let redirectUrl = item.original_url;
     if (
