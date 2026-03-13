@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { X, Smartphone, Monitor, Tablet, MapPin, Globe, Loader2, Calendar } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -58,44 +58,54 @@ export default function AnalyticsModal({
   }, [qrCodeId]);
 
   // Process data for charts
-  const deviceCounts = scans.reduce((acc, scan) => {
-    const device = scan.device || "Desconhecido";
-    acc[device] = (acc[device] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  const { deviceData, temporalData, recentCities, totalScans } = useMemo(() => {
+    const total = scans.length;
 
-  const deviceData = Object.keys(deviceCounts).map((key) => ({
-    name: key,
-    value: deviceCounts[key],
-  }));
+    // Device Stats
+    const deviceCounts = scans.reduce((acc, scan) => {
+      const device = scan.device || "Desconhecido";
+      acc[device] = (acc[device] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
 
-  // Process data for temporal chart (Clicks per day - last 7 days)
-  const clicksByDate = scans.reduce((acc, scan) => {
-    if (!scan.created_at) return acc;
-    const date = new Date(scan.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-    acc[date] = (acc[date] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+    const dData = Object.keys(deviceCounts).map((key) => ({
+      name: key,
+      value: deviceCounts[key],
+    }));
 
-  const last7Days = Array.from({ length: 7 }).map((_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - (6 - i));
-    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-  });
+    // Temporal Stats (Clicks per day - last 7 days)
+    const clicksByDate = scans.reduce((acc, scan) => {
+      if (!scan.created_at) return acc;
+      const date = new Date(scan.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+      acc[date] = (acc[date] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
 
-  const temporalData = last7Days.map(date => ({
-    date,
-    acessos: clicksByDate[date] || 0
-  }));
+    const last7Days = Array.from({ length: 7 }).map((_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (6 - i));
+      return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    });
 
-  const totalScans = scans.length;
+    const tData = last7Days.map(date => ({
+      date,
+      acessos: clicksByDate[date] || 0
+    }));
 
-  // Recent cities
-  const recentCities = scans
-    .filter((s) => s.city && s.city !== "Desconhecida")
-    .map((s) => `${s.city}, ${s.region || s.country}`)
-    .filter((v, i, a) => a.indexOf(v) === i)
-    .slice(0, 5);
+    // Recent cities
+    const rCities = scans
+      .filter((s) => s.city && s.city !== "Desconhecida")
+      .map((s) => `${s.city}, ${s.region || s.country}`)
+      .filter((v, i, a) => a.indexOf(v) === i)
+      .slice(0, 5);
+
+    return {
+      deviceData: dData,
+      temporalData: tData,
+      recentCities: rCities,
+      totalScans: total
+    };
+  }, [scans]);
 
   const colors = ["#7B48EA", "#9D72F3", "#BFA0F9", "#E1D0FE"];
 
