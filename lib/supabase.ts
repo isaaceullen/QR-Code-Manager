@@ -32,6 +32,7 @@ export async function trackClickAndLogAnalytics(
     {
       qr_code_id: qrCodeId,
       ...analyticsData,
+      created_at: new Date().toISOString(),
     },
   ]);
 
