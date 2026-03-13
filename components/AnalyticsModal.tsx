@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, Smartphone, Monitor, Tablet, MapPin, Globe, Loader2 } from "lucide-react";
+import { X, Smartphone, Monitor, Tablet, MapPin, Globe, Loader2, Calendar } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import {
   BarChart,
@@ -10,6 +10,9 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
+  LineChart,
+  Line,
+  CartesianGrid,
 } from "recharts";
 
 type ScanData = {
@@ -64,6 +67,25 @@ export default function AnalyticsModal({
   const deviceData = Object.keys(deviceCounts).map((key) => ({
     name: key,
     value: deviceCounts[key],
+  }));
+
+  // Process data for temporal chart (Clicks per day - last 7 days)
+  const clicksByDate = scans.reduce((acc, scan) => {
+    if (!scan.created_at) return acc;
+    const date = new Date(scan.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    acc[date] = (acc[date] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const last7Days = Array.from({ length: 7 }).map((_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (6 - i));
+    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  });
+
+  const temporalData = last7Days.map(date => ({
+    date,
+    acessos: clicksByDate[date] || 0
   }));
 
   const totalScans = scans.length;
@@ -128,6 +150,53 @@ export default function AnalyticsModal({
               </div>
             ) : (
               <div className="space-y-8">
+                {/* Temporal Stats */}
+                <div>
+                  <h3 className="text-sm font-medium text-white/70 uppercase tracking-wider mb-4 flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    Cliques nos Últimos 7 Dias
+                  </h3>
+                  <div className="h-64 w-full bg-[#050505] rounded-xl border border-white/5 p-4">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={temporalData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                        <XAxis 
+                          dataKey="date" 
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fill: "rgba(255,255,255,0.5)", fontSize: 12 }}
+                          dy={10}
+                        />
+                        <YAxis 
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fill: "rgba(255,255,255,0.5)", fontSize: 12 }}
+                          allowDecimals={false}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "#111111",
+                            border: "1px solid rgba(255,255,255,0.1)",
+                            borderRadius: "8px",
+                            color: "#fff",
+                          }}
+                          itemStyle={{ color: "#7B48EA" }}
+                          formatter={(value: any) => [value, "Acessos"]}
+                          labelStyle={{ color: "rgba(255,255,255,0.5)", marginBottom: "4px" }}
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="acessos" 
+                          stroke="#7B48EA" 
+                          strokeWidth={3}
+                          dot={{ fill: "#111111", stroke: "#7B48EA", strokeWidth: 2, r: 4 }}
+                          activeDot={{ fill: "#7B48EA", stroke: "#fff", strokeWidth: 2, r: 6 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
                 {/* Device Stats */}
                 <div>
                   <h3 className="text-sm font-medium text-white/70 uppercase tracking-wider mb-4 flex items-center gap-2">
