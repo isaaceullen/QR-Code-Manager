@@ -26,6 +26,7 @@ import {
 import Image from "next/image";
 import { motion, AnimatePresence } from "motion/react";
 import AnalyticsModal from "@/components/AnalyticsModal";
+import Navigation from "@/components/Navigation";
 
 type QRCodeData = {
   id: string;
@@ -76,7 +77,6 @@ export default function Dashboard() {
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
   const [selectedQrCode, setSelectedQrCode] = useState<string | null>(null);
   const [selectedQrCodeTitle, setSelectedQrCodeTitle] = useState<string>("");
-  const [activeTab, setActiveTab] = useState<"qr" | "links">("qr");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -212,48 +212,6 @@ export default function Dashboard() {
     setSyncing(false);
   };
 
-  const handleGenerateLink = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!url || !user) return;
-
-    setGenerating(true);
-    setSyncing(true);
-    setError("");
-
-    const slug = generateSlug(6);
-
-    const newLink = {
-      title: title || "Link Sem Título",
-      user_id: user.id,
-      original_url: url,
-      slug,
-      design_settings: {
-        color: "#000000",
-        logo_url: "",
-        is_link_only: true,
-      },
-      clicks: 0,
-    };
-
-    const { data, error: insertError } = await supabase
-      .from("qr_codes")
-      .insert([newLink])
-      .select()
-      .single();
-
-    if (insertError) {
-      console.error("Error generating link:", insertError);
-      setError("Erro ao criar Link. Verifique as configurações do banco.");
-    } else if (data) {
-      setQrCodes([data, ...qrCodes]);
-      setUrl("");
-      setTitle("");
-    }
-
-    setGenerating(false);
-    setSyncing(false);
-  };
-
   const handleDelete = async (id: string) => {
     setSyncing(true);
     const { error } = await supabase.from("qr_codes").delete().eq("id", id);
@@ -339,7 +297,6 @@ export default function Dashboard() {
   const qrValue = url ? getPreviewUrl() : "https://example.com";
 
   const filteredQrCodes = qrCodes.filter(qr => !qr.design_settings?.is_link_only);
-  const filteredLinks = qrCodes.filter(qr => qr.design_settings?.is_link_only);
 
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-[#7B48EA] selection:text-white">
@@ -451,40 +408,10 @@ export default function Dashboard() {
           </div>
         ) : (
           <>
-            <div className="flex gap-4 border-b border-white/10 mb-8">
-              <button
-                onClick={() => setActiveTab("qr")}
-                className={`pb-4 px-2 text-sm font-medium transition-colors relative ${
-                  activeTab === "qr" ? "text-white" : "text-white/50 hover:text-white/80"
-                }`}
-              >
-                QR Codes
-                {activeTab === "qr" && (
-                  <motion.div
-                    layoutId="activeTab"
-                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#7B48EA]"
-                  />
-                )}
-              </button>
-              <button
-                onClick={() => setActiveTab("links")}
-                className={`pb-4 px-2 text-sm font-medium transition-colors relative ${
-                  activeTab === "links" ? "text-white" : "text-white/50 hover:text-white/80"
-                }`}
-              >
-                Links
-                {activeTab === "links" && (
-                  <motion.div
-                    layoutId="activeTab"
-                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#7B48EA]"
-                  />
-                )}
-              </button>
-            </div>
+            <Navigation />
 
-            {activeTab === "qr" ? (
-              <div className="space-y-8">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="space-y-8">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                   {/* Main Content Area */}
                   <div className="lg:col-span-2 space-y-6">
                 <motion.div
@@ -917,226 +844,6 @@ export default function Dashboard() {
               )}
             </motion.div>
             </div>
-            ) : (
-              <div className="space-y-8">
-                <motion.div
-                  key="link-generator"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="bg-[#111111] rounded-2xl border border-white/10 overflow-hidden max-w-2xl"
-                >
-                  <div className="p-6 border-b border-white/5">
-                    <h2 className="text-lg font-semibold flex items-center gap-2 text-white">
-                      <LinkIcon className="w-5 h-5 text-[#7B48EA]" />
-                      Encurtar Novo Link
-                    </h2>
-                  </div>
-                  <form onSubmit={handleGenerateLink} className="p-6 space-y-6">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-white/70 flex items-center gap-2">
-                        <Type className="w-4 h-4 text-white/40" />
-                        Título do Link
-                      </label>
-                      <input
-                        type="text"
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        placeholder="Ex: Campanha de Verão"
-                        className="w-full px-4 py-3 rounded-xl bg-[#050505] border border-white/10 focus:border-[#7B48EA] focus:ring-1 focus:ring-[#7B48EA] outline-none transition-all text-white placeholder:text-white/30"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-white/70 flex items-center gap-2">
-                        <LinkIcon className="w-4 h-4 text-white/40" />
-                        URL de Destino
-                      </label>
-                      <input
-                        type="url"
-                        required
-                        value={url}
-                        onChange={(e) => setUrl(e.target.value)}
-                        placeholder="https://seusite.com/campanha"
-                        className="w-full px-4 py-3 rounded-xl bg-[#050505] border border-white/10 focus:border-[#7B48EA] focus:ring-1 focus:ring-[#7B48EA] outline-none transition-all text-white placeholder:text-white/30"
-                      />
-                    </div>
-
-                    <button
-                      type="submit"
-                      disabled={generating || !url}
-                      className="w-full bg-[#7B48EA] hover:bg-[#6A3DE8] text-white font-medium py-3 px-4 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-[0_4px_20px_rgba(123,72,234,0.3)]"
-                    >
-                      {generating ? (
-                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      ) : (
-                        <>Encurtar Link</>
-                      )}
-                    </button>
-                  </form>
-                </motion.div>
-
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="space-y-6 pt-8 border-t border-white/10"
-                >
-                  <h2 className="text-xl font-semibold text-white">Seus Links</h2>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    <div className="bg-[#111111] rounded-2xl border border-[#7B48EA]/30 p-6">
-                      <div className="flex items-center gap-3 mb-2">
-                        <LinkIcon className="w-5 h-5 text-[#7B48EA]" />
-                        <h3 className="text-white/70 font-medium">Total de Links</h3>
-                      </div>
-                      <p className="text-3xl font-bold text-white">
-                        {filteredLinks.length}
-                      </p>
-                    </div>
-                    <div className="bg-[#111111] rounded-2xl border border-[#7B48EA]/30 p-6">
-                      <div className="flex items-center gap-3 mb-2">
-                        <TrendingUp className="w-5 h-5 text-[#7B48EA]" />
-                        <h3 className="text-white/70 font-medium">
-                          Total de Cliques
-                        </h3>
-                      </div>
-                      <p className="text-3xl font-bold text-white">
-                        {filteredLinks.reduce((acc, link) => acc + (link.clicks || 0), 0)}
-                      </p>
-                    </div>
-                    <div className="bg-[#111111] rounded-2xl border border-[#7B48EA]/30 p-6">
-                      <div className="flex items-center gap-3 mb-2">
-                        <Star className="w-5 h-5 text-[#7B48EA]" />
-                        <h3 className="text-white/70 font-medium">Mais Popular</h3>
-                      </div>
-                      <p
-                        className="text-lg font-bold text-white truncate"
-                        title={
-                          filteredLinks.length > 0
-                            ? filteredLinks.reduce((prev, current) =>
-                                prev.clicks > current.clicks ? prev : current,
-                              ).title ||
-                              filteredLinks.reduce((prev, current) =>
-                                prev.clicks > current.clicks ? prev : current,
-                              ).original_url
-                            : "Nenhum"
-                        }
-                      >
-                        {filteredLinks.length > 0
-                          ? filteredLinks.reduce((prev, current) =>
-                              prev.clicks > current.clicks ? prev : current,
-                            ).title ||
-                            filteredLinks.reduce((prev, current) =>
-                              prev.clicks > current.clicks ? prev : current,
-                            ).original_url
-                          : "Nenhum"}
-                      </p>
-                    </div>
-                  </div>
-
-                  {loading ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {[1, 2, 3].map((i) => (
-                        <div
-                          key={i}
-                          className="bg-[#111111] rounded-2xl border border-white/5 p-6 h-32 animate-pulse"
-                        />
-                      ))}
-                    </div>
-                  ) : filteredLinks.length === 0 ? (
-                    <div className="bg-[#111111] rounded-2xl border border-white/5 p-12 text-center">
-                      <div className="w-16 h-16 bg-[#222222] rounded-full flex items-center justify-center mx-auto mb-4">
-                        <BarChart2 className="w-8 h-8 text-white/20" />
-                      </div>
-                      <h3 className="text-lg font-medium text-white">
-                        Nenhum Link criado
-                      </h3>
-                      <p className="text-white/50 mt-1">
-                        Crie seu primeiro Link encurtado acima.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {filteredLinks.map((link) => (
-                        <motion.div
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          key={link.id}
-                          className="bg-[#111111] rounded-2xl border border-white/10 overflow-hidden flex flex-col hover:border-white/20 transition-colors"
-                        >
-                          <div 
-                            className="p-6 flex gap-4 items-center border-b border-white/5 cursor-pointer hover:bg-white/5 transition-colors"
-                            onClick={() => {
-                              setSelectedQrCode(link.id);
-                              setSelectedQrCodeTitle(link.title || link.slug);
-                            }}
-                          >
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <BarChart2 className="w-4 h-4 text-[#7B48EA]" />
-                                <span className="text-2xl font-bold text-white">
-                                  {link.clicks}
-                                </span>
-                                <span className="text-sm text-white/50">cliques</span>
-                              </div>
-                              {link.title && (
-                                <p
-                                  className="text-white font-medium truncate"
-                                  title={link.title}
-                                >
-                                  {link.title}
-                                </p>
-                              )}
-                              <p
-                                className="text-sm text-white/50 truncate"
-                                title={link.original_url}
-                              >
-                                {link.original_url}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="bg-[#0A0A0A] p-4 flex items-center justify-between gap-2 mt-auto">
-                            <div className="flex items-center gap-2 overflow-hidden">
-                              <span className="text-xs font-mono text-white/60 bg-[#222222] px-2 py-1 rounded border border-white/5 truncate">
-                                /l/{link.slug}
-                              </span>
-                            </div>
-                            <div className="flex gap-1">
-                              <button
-                                onClick={() => handleCopy(link.slug, true)}
-                                className="p-2 text-white/40 hover:text-[#7B48EA] hover:bg-[#7B48EA]/10 rounded-lg transition-colors"
-                                title="Copiar Link Curto"
-                              >
-                                {copiedSlug === link.slug ? (
-                                  <Check className="w-4 h-4 text-emerald-400" />
-                                ) : (
-                                  <Copy className="w-4 h-4" />
-                                )}
-                              </button>
-                              <a
-                                href={`/l/${link.slug}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="p-2 text-white/40 hover:text-[#7B48EA] hover:bg-[#7B48EA]/10 rounded-lg transition-colors"
-                                title="Testar Link"
-                              >
-                                <ExternalLink className="w-4 h-4" />
-                              </a>
-                              <button
-                                onClick={() => handleDelete(link.id)}
-                                className="p-2 text-white/40 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
-                                title="Excluir"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-                        </motion.div>
-                      ))}
-                    </div>
-                  )}
-                </motion.div>
-              </div>
-            )}
           </>
         )}
       </div>

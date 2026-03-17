@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, Smartphone, Monitor, Tablet, MapPin, Globe, Loader2, Calendar, Compass } from "lucide-react";
+import { X, Smartphone, Monitor, Tablet, MapPin, Globe, Loader2, Calendar, Compass, Clock } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import {
   BarChart,
@@ -59,7 +59,7 @@ export default function AnalyticsModal({
   }, [qrCodeId]);
 
   // Process data for charts
-  const { deviceData, browserData, cityData, temporalData, totalScans } = useMemo(() => {
+  const { deviceData, browserData, cityData, temporalData, peakHoursData, totalScans } = useMemo(() => {
     const now = new Date();
     
     // Filter by period
@@ -103,6 +103,14 @@ export default function AnalyticsModal({
       return `${s.city}, ${s.region || s.country}`;
     });
 
+    // Peak Hours Stats
+    const pHoursData = groupAndSort(s => {
+      if (!s.created_at) return "Desconhecido";
+      const hour = new Date(s.created_at).getHours();
+      const formattedHour = hour.toString().padStart(2, '0');
+      return `${formattedHour}:00 - ${formattedHour}:59`;
+    }).filter(item => item.name !== "Desconhecido");
+
     // Temporal Stats
     const clicksByDate = filteredScans.reduce((acc, scan) => {
       if (!scan.created_at) return acc;
@@ -137,6 +145,7 @@ export default function AnalyticsModal({
       browserData: bData,
       cityData: cData,
       temporalData: tData,
+      peakHoursData: pHoursData,
       totalScans: total
     };
   }, [scans, period]);
@@ -364,6 +373,34 @@ export default function AnalyticsModal({
                   ) : (
                     <p className="text-white/40 text-sm">
                       Nenhuma localização identificada.
+                    </p>
+                  )}
+                </div>
+
+                {/* Peak Hours Stats */}
+                <div>
+                  <h3 className="text-sm font-medium text-white/70 uppercase tracking-wider mb-4 flex items-center gap-2">
+                    <Clock className="w-4 h-4" />
+                    Horários de Pico
+                  </h3>
+                  {peakHoursData.length > 0 ? (
+                    <div className="bg-[#050505] rounded-xl border border-white/5 overflow-hidden">
+                      {peakHoursData.map((item, i) => (
+                        <div
+                          key={i}
+                          className="px-4 py-3 border-b border-white/5 last:border-0 flex items-center justify-between"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-2 h-2 rounded-full bg-[#7B48EA]" />
+                            <span className="text-white/80 text-sm">{item.name}</span>
+                          </div>
+                          <span className="font-bold text-white">{item.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-white/40 text-sm">
+                      Nenhum horário identificado.
                     </p>
                   )}
                 </div>
