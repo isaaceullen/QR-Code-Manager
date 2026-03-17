@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, Smartphone, Monitor, Tablet, MapPin, Globe, Loader2, Calendar, Compass, Clock } from "lucide-react";
+import { X, Smartphone, Monitor, Tablet, MapPin, Globe, Loader2, Calendar, Compass, Clock, List } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import {
   BarChart,
@@ -292,6 +292,54 @@ export default function AnalyticsModal({
                         />
                       </LineChart>
                     </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Detailed History Table */}
+                <div>
+                  <h3 className="text-sm font-medium text-white/70 uppercase tracking-wider mb-4 flex items-center gap-2">
+                    <List className="w-4 h-4" />
+                    Últimos Acessos (Detalhado)
+                  </h3>
+                  <div className="bg-[#050505] rounded-xl border border-white/10 overflow-hidden overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-white/10 bg-white/5">
+                          <th className="px-4 py-3 text-xs font-medium text-white/50 uppercase tracking-wider">Data e Hora</th>
+                          <th className="px-4 py-3 text-xs font-medium text-white/50 uppercase tracking-wider">Localização</th>
+                          <th className="px-4 py-3 text-xs font-medium text-white/50 uppercase tracking-wider">Dispositivo</th>
+                          <th className="px-4 py-3 text-xs font-medium text-white/50 uppercase tracking-wider">Navegador</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {scans.slice(0, 50).map((scan) => (
+                          <tr key={scan.id} className="hover:bg-white/5 transition-colors">
+                            <td className="px-4 py-3 text-xs text-white/80 whitespace-nowrap">
+                              {scan.created_at ? (
+                                (() => {
+                                  const d = new Date(scan.created_at);
+                                  return `${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} às ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+                                })()
+                              ) : (
+                                "Desconhecido"
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-xs text-white/80">
+                              {scan.city && scan.city !== "Desconhecida" ? `${scan.city} - ${scan.region || scan.country}` : "Desconhecida"}
+                            </td>
+                            <td className="px-4 py-3 text-xs text-white/80">{scan.device || "Desconhecido"}</td>
+                            <td className="px-4 py-3 text-xs text-white/80">{scan.browser || "Desconhecido"}</td>
+                          </tr>
+                        ))}
+                        {scans.length === 0 && (
+                          <tr>
+                            <td colSpan={4} className="px-4 py-8 text-center text-xs text-white/40">
+                              Nenhum acesso registrado.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
 
