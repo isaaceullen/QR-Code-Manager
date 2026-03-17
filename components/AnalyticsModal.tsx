@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, Smartphone, Monitor, Tablet, MapPin, Globe, Loader2, Calendar } from "lucide-react";
+import { X, Smartphone, Monitor, Tablet, MapPin, Globe, Loader2, Calendar, Compass } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import {
   BarChart,
@@ -38,6 +38,7 @@ export default function AnalyticsModal({
 }: AnalyticsModalProps) {
   const [scans, setScans] = useState<ScanData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState<"7d" | "30d" | "all">("7d");
 
   useEffect(() => {
     const fetchScans = async () => {
@@ -58,54 +59,87 @@ export default function AnalyticsModal({
   }, [qrCodeId]);
 
   // Process data for charts
-  const { deviceData, temporalData, recentCities, totalScans } = useMemo(() => {
-    const total = scans.length;
+  const { deviceData, browserData, cityData, temporalData, totalScans } = useMemo(() => {
+    const now = new Date();
+    
+    // Filter by period
+    const filteredScans = scans.filter(scan => {
+      if (period === "all") return true;
+      if (!scan.created_at) return false;
+      
+      const scanDate = new Date(scan.created_at);
+      const diffTime = Math.abs(now.getTime() - scanDate.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (period === "7d") return diffDays <= 7;
+      if (period === "30d") return diffDays <= 30;
+      return true;
+    });
+
+    const total = filteredScans.length;
+
+    // Helper to group, count, and sort
+    const groupAndSort = (keyFn: (scan: ScanData) => string) => {
+      const counts = filteredScans.reduce((acc, scan) => {
+        const key = keyFn(scan);
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
+      return Object.entries(counts)
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value);
+    };
 
     // Device Stats
-    const deviceCounts = scans.reduce((acc, scan) => {
-      const device = scan.device || "Desconhecido";
-      acc[device] = (acc[device] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+    const dData = groupAndSort(s => s.device || "Desconhecido");
 
-    const dData = Object.keys(deviceCounts).map((key) => ({
-      name: key,
-      value: deviceCounts[key],
-    }));
+    // Browser Stats
+    const bData = groupAndSort(s => s.browser || "Desconhecido");
 
-    // Temporal Stats (Clicks per day - last 7 days)
-    const clicksByDate = scans.reduce((acc, scan) => {
+    // City Stats
+    const cData = groupAndSort(s => {
+      if (!s.city || s.city === "Desconhecida") return "Desconhecida";
+      return `${s.city}, ${s.region || s.country}`;
+    });
+
+    // Temporal Stats
+    const clicksByDate = filteredScans.reduce((acc, scan) => {
       if (!scan.created_at) return acc;
       const date = new Date(scan.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
       acc[date] = (acc[date] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
 
-    const last7Days = Array.from({ length: 7 }).map((_, i) => {
+    let daysToGenerate = 7;
+    if (period === "30d") daysToGenerate = 30;
+    if (period === "all") {
+      if (filteredScans.length > 0) {
+        const oldest = new Date(Math.min(...filteredScans.map(s => new Date(s.created_at).getTime())));
+        const diffTime = Math.abs(now.getTime() - oldest.getTime());
+        daysToGenerate = Math.max(7, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+      }
+    }
+
+    const dateArray = Array.from({ length: daysToGenerate }).map((_, i) => {
       const d = new Date();
-      d.setDate(d.getDate() - (6 - i));
+      d.setDate(d.getDate() - (daysToGenerate - 1 - i));
       return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
     });
 
-    const tData = last7Days.map(date => ({
+    const tData = dateArray.map(date => ({
       date,
       acessos: clicksByDate[date] || 0
     }));
 
-    // Recent cities
-    const rCities = scans
-      .filter((s) => s.city && s.city !== "Desconhecida")
-      .map((s) => `${s.city}, ${s.region || s.country}`)
-      .filter((v, i, a) => a.indexOf(v) === i)
-      .slice(0, 5);
-
     return {
       deviceData: dData,
+      browserData: bData,
+      cityData: cData,
       temporalData: tData,
-      recentCities: rCities,
       totalScans: total
     };
-  }, [scans]);
+  }, [scans, period]);
 
   const colors = ["#7B48EA", "#9D72F3", "#BFA0F9", "#E1D0FE"];
 
@@ -134,15 +168,59 @@ export default function AnalyticsModal({
                 {qrCodeTitle || "Item"}
               </p>
             </div>
-            <button
-              onClick={onClose}
-              className="p-2 text-white/50 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-4">
+              <div className="hidden sm:flex bg-[#050505] rounded-lg p-1 border border-white/10">
+                <button 
+                  onClick={() => setPeriod('7d')}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${period === '7d' ? 'bg-[#7B48EA] text-white' : 'text-white/50 hover:text-white'}`}
+                >
+                  7 Dias
+                </button>
+                <button 
+                  onClick={() => setPeriod('30d')}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${period === '30d' ? 'bg-[#7B48EA] text-white' : 'text-white/50 hover:text-white'}`}
+                >
+                  30 Dias
+                </button>
+                <button 
+                  onClick={() => setPeriod('all')}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${period === 'all' ? 'bg-[#7B48EA] text-white' : 'text-white/50 hover:text-white'}`}
+                >
+                  Todos
+                </button>
+              </div>
+              <button
+                onClick={onClose}
+                className="p-2 text-white/50 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           <div className="p-6 overflow-y-auto flex-1">
+            {/* Mobile Period Selector */}
+            <div className="sm:hidden flex bg-[#050505] rounded-lg p-1 border border-white/10 mb-6">
+              <button 
+                onClick={() => setPeriod('7d')}
+                className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${period === '7d' ? 'bg-[#7B48EA] text-white' : 'text-white/50 hover:text-white'}`}
+              >
+                7 Dias
+              </button>
+              <button 
+                onClick={() => setPeriod('30d')}
+                className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${period === '30d' ? 'bg-[#7B48EA] text-white' : 'text-white/50 hover:text-white'}`}
+              >
+                30 Dias
+              </button>
+              <button 
+                onClick={() => setPeriod('all')}
+                className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${period === 'all' ? 'bg-[#7B48EA] text-white' : 'text-white/50 hover:text-white'}`}
+              >
+                Todos
+              </button>
+            </div>
+
             {loading ? (
               <div className="flex flex-col items-center justify-center py-12">
                 <Loader2 className="w-8 h-8 text-[#7B48EA] animate-spin mb-4" />
@@ -164,7 +242,7 @@ export default function AnalyticsModal({
                 <div>
                   <h3 className="text-sm font-medium text-white/70 uppercase tracking-wider mb-4 flex items-center gap-2">
                     <Calendar className="w-4 h-4" />
-                    Cliques nos Últimos 7 Dias
+                    Evolução de Acessos
                   </h3>
                   <div className="h-64 w-full bg-[#050505] rounded-xl border border-white/5 p-4">
                     <ResponsiveContainer width="100%" height="100%">
@@ -176,6 +254,7 @@ export default function AnalyticsModal({
                           tickLine={false}
                           tick={{ fill: "rgba(255,255,255,0.5)", fontSize: 12 }}
                           dy={10}
+                          minTickGap={20}
                         />
                         <YAxis 
                           axisLine={false}
@@ -207,47 +286,57 @@ export default function AnalyticsModal({
                   </div>
                 </div>
 
-                {/* Device Stats */}
-                <div>
-                  <h3 className="text-sm font-medium text-white/70 uppercase tracking-wider mb-4 flex items-center gap-2">
-                    <Smartphone className="w-4 h-4" />
-                    Acessos por Dispositivo
-                  </h3>
-                  <div className="h-64 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={deviceData} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                        <XAxis type="number" hide />
-                        <YAxis
-                          dataKey="name"
-                          type="category"
-                          axisLine={false}
-                          tickLine={false}
-                          tick={{ fill: "rgba(255,255,255,0.7)", fontSize: 12 }}
-                          width={80}
-                        />
-                        <Tooltip
-                          cursor={{ fill: "rgba(255,255,255,0.05)" }}
-                          contentStyle={{
-                            backgroundColor: "#050505",
-                            border: "1px solid rgba(255,255,255,0.1)",
-                            borderRadius: "8px",
-                            color: "#fff",
-                          }}
-                          formatter={(value: any) => [
-                            value && totalScans > 0 ? `${value} (${((value / totalScans) * 100).toFixed(1)}%)` : '0',
-                            "Acessos",
-                          ]}
-                        />
-                        <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={32}>
-                          {deviceData.map((entry, index) => (
-                            <Cell
-                              key={`cell-${index}`}
-                              fill={colors[index % colors.length]}
-                            />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* Device Stats */}
+                  <div>
+                    <h3 className="text-sm font-medium text-white/70 uppercase tracking-wider mb-4 flex items-center gap-2">
+                      <Smartphone className="w-4 h-4" />
+                      Dispositivos
+                    </h3>
+                    {deviceData.length > 0 ? (
+                      <div className="bg-[#050505] rounded-xl border border-white/5 overflow-hidden">
+                        {deviceData.map((item, i) => (
+                          <div
+                            key={i}
+                            className="px-4 py-3 border-b border-white/5 last:border-0 flex items-center justify-between"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-2 h-2 rounded-full bg-[#7B48EA]" />
+                              <span className="text-white/80 text-sm">{item.name}</span>
+                            </div>
+                            <span className="font-bold text-white">{item.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-white/40 text-sm">Nenhum dispositivo identificado.</p>
+                    )}
+                  </div>
+
+                  {/* Browser Stats */}
+                  <div>
+                    <h3 className="text-sm font-medium text-white/70 uppercase tracking-wider mb-4 flex items-center gap-2">
+                      <Compass className="w-4 h-4" />
+                      Navegadores
+                    </h3>
+                    {browserData.length > 0 ? (
+                      <div className="bg-[#050505] rounded-xl border border-white/5 overflow-hidden">
+                        {browserData.map((item, i) => (
+                          <div
+                            key={i}
+                            className="px-4 py-3 border-b border-white/5 last:border-0 flex items-center justify-between"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-2 h-2 rounded-full bg-[#7B48EA]" />
+                              <span className="text-white/80 text-sm">{item.name}</span>
+                            </div>
+                            <span className="font-bold text-white">{item.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-white/40 text-sm">Nenhum navegador identificado.</p>
+                    )}
                   </div>
                 </div>
 
@@ -255,17 +344,20 @@ export default function AnalyticsModal({
                 <div>
                   <h3 className="text-sm font-medium text-white/70 uppercase tracking-wider mb-4 flex items-center gap-2">
                     <MapPin className="w-4 h-4" />
-                    Últimas Cidades
+                    Cidades
                   </h3>
-                  {recentCities.length > 0 ? (
+                  {cityData.length > 0 ? (
                     <div className="bg-[#050505] rounded-xl border border-white/5 overflow-hidden">
-                      {recentCities.map((city, i) => (
+                      {cityData.map((item, i) => (
                         <div
                           key={i}
-                          className="px-4 py-3 border-b border-white/5 last:border-0 flex items-center gap-3"
+                          className="px-4 py-3 border-b border-white/5 last:border-0 flex items-center justify-between"
                         >
-                          <div className="w-2 h-2 rounded-full bg-[#7B48EA]" />
-                          <span className="text-white/80 text-sm">{city}</span>
+                          <div className="flex items-center gap-3">
+                            <div className="w-2 h-2 rounded-full bg-[#7B48EA]" />
+                            <span className="text-white/80 text-sm">{item.name}</span>
+                          </div>
+                          <span className="font-bold text-white">{item.value}</span>
                         </div>
                       ))}
                     </div>
