@@ -16,6 +16,7 @@ import {
   Type,
   Download,
   Upload,
+  Lock,
 } from "lucide-react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "motion/react";
@@ -23,6 +24,7 @@ import AnalyticsModal from "@/components/AnalyticsModal";
 import Navigation from "@/components/Navigation";
 import { exportBackup, importBackup, BackupData } from "@/lib/backupService";
 import { useRef } from "react";
+import Link from "next/link";
 
 type QRCodeData = {
   id: string;
@@ -317,6 +319,13 @@ export default function LinksDashboard() {
               <span className="hidden sm:inline">Exportar Backup</span>
             </button>
             <div className="w-px h-4 bg-white/10 mx-2 hidden sm:block"></div>
+            <Link
+              href="/mudar-senha"
+              className="text-sm font-medium text-white/50 hover:text-white transition-colors flex items-center gap-2"
+            >
+              <Lock className="w-4 h-4" />
+              <span className="hidden sm:inline">Trocar Senha</span>
+            </Link>
             <button
               onClick={handleLogout}
               className="text-sm font-medium text-white/50 hover:text-white transition-colors"
