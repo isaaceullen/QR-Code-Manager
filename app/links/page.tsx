@@ -14,11 +14,15 @@ import {
   TrendingUp,
   Star,
   Type,
+  Download,
+  Upload,
 } from "lucide-react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "motion/react";
 import AnalyticsModal from "@/components/AnalyticsModal";
 import Navigation from "@/components/Navigation";
+import { exportBackup, importBackup, BackupData } from "@/lib/backupService";
+import { useRef } from "react";
 
 type QRCodeData = {
   id: string;
@@ -65,6 +69,8 @@ export default function LinksDashboard() {
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
   const [selectedQrCode, setSelectedQrCode] = useState<string | null>(null);
   const [selectedQrCodeTitle, setSelectedQrCodeTitle] = useState<string>("");
+
+  const backupFileInputRef = useRef<HTMLInputElement>(null);
 
   const loadQRCodes = async () => {
     setLoading(true);
@@ -137,6 +143,55 @@ export default function LinksDashboard() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+  };
+
+  const handleExport = async () => {
+    if (!user) return;
+    setSyncing(true);
+    try {
+      const data = await exportBackup(user.id);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `meus-links-backup-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      alert("Backup exportado com sucesso!");
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Erro ao exportar backup.");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleImportClick = () => {
+    backupFileInputRef.current?.click();
+  };
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    setSyncing(true);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text) as BackupData;
+      await importBackup(user.id, data);
+      alert("Backup importado com sucesso!");
+      loadQRCodes();
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Erro ao importar backup. Verifique o formato do arquivo.");
+    } finally {
+      setSyncing(false);
+      if (backupFileInputRef.current) {
+        backupFileInputRef.current.value = "";
+      }
+    }
   };
 
   const handleGenerateLink = async (e: React.FormEvent) => {
@@ -237,12 +292,38 @@ export default function LinksDashboard() {
           <Image src="https://i.imgur.com/864yjao.png" alt="Camerite" width={120} height={40} className="max-h-8 md:max-h-10 w-auto" referrerPolicy="no-referrer" />
         </div>
         {user && (
-          <button
-            onClick={handleLogout}
-            className="text-sm font-medium text-white/50 hover:text-white transition-colors"
-          >
-            Sair
-          </button>
+          <div className="flex items-center gap-4">
+            <input
+              type="file"
+              accept=".json"
+              ref={backupFileInputRef}
+              onChange={handleImportFile}
+              className="hidden"
+            />
+            <button
+              onClick={handleImportClick}
+              disabled={syncing}
+              className="text-sm font-medium text-white/50 hover:text-white transition-colors flex items-center gap-2 disabled:opacity-50"
+            >
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">Importar Dados</span>
+            </button>
+            <button
+              onClick={handleExport}
+              disabled={syncing}
+              className="text-sm font-medium text-white/50 hover:text-white transition-colors flex items-center gap-2 disabled:opacity-50"
+            >
+              <Upload className="w-4 h-4" />
+              <span className="hidden sm:inline">Exportar Backup</span>
+            </button>
+            <div className="w-px h-4 bg-white/10 mx-2 hidden sm:block"></div>
+            <button
+              onClick={handleLogout}
+              className="text-sm font-medium text-white/50 hover:text-white transition-colors"
+            >
+              Sair
+            </button>
+          </div>
         )}
       </header>
 
