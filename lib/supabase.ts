@@ -23,7 +23,7 @@ export async function trackClickAndLogAnalytics(
     .eq("id", qrCodeId);
 
   if (updateError) {
-    console.error("Error updating clicks:", updateError);
+    console.error("Erro ao atualizar qr_codes:", updateError);
     return { success: false, error: updateError };
   }
 
@@ -37,7 +37,7 @@ export async function trackClickAndLogAnalytics(
   ]);
 
   if (insertError) {
-    console.error("Error inserting analytics:", insertError);
+    console.error("Erro ao inserir em qr_scans:", insertError);
     return { success: false, error: insertError };
   }
 
