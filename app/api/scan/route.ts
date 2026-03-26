@@ -18,11 +18,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Slug is required" }, { status: 400 });
     }
 
+    const decodedSlug = decodeURIComponent(slug);
+
     // Fetch the QR code or Link
     const { data: item, error: fetchError } = await supabase
       .from("qr_codes")
       .select("id, original_url, clicks, type")
-      .eq("slug", slug)
+      .eq("slug", decodedSlug)
       .single();
 
     if (fetchError || !item) {

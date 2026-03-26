@@ -9,12 +9,13 @@ export default function RedirectPage() {
   const params = useParams();
   const router = useRouter();
   const slug = params.slug as string;
+  const decodedSlug = slug ? decodeURIComponent(slug) : "";
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    if (!slug) return;
+    if (!decodedSlug) return;
 
-    if (slug === "preview") {
+    if (decodedSlug === "preview") {
       // Just a preview, no redirect
       return;
     }
@@ -26,7 +27,7 @@ export default function RedirectPage() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ slug }),
+          body: JSON.stringify({ slug: decodedSlug }),
         });
 
         if (!response.ok) {
@@ -53,7 +54,7 @@ export default function RedirectPage() {
     };
 
     processRedirect();
-  }, [slug, router]);
+  }, [decodedSlug, router]);
 
   if (error) {
     return (
