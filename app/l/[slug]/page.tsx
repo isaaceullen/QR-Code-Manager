@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
+import { sanitizeText } from "@/lib/utils";
 
 export default function RedirectPage() {
   const params = useParams();
   const router = useRouter();
   const slug = params.slug as string;
-  const decodedSlug = slug ? decodeURIComponent(slug) : "";
+  const decodedSlug = slug ? sanitizeText(slug) : "";
   const [error, setError] = useState(false);
 
   useEffect(() => {
